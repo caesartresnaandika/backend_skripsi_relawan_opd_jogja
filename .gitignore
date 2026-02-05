@@ -1,0 +1,31 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Build output (TypeScript compiled files)
+dist/
+build/
+
+# Environment variables (PENTING: Jangan di-push ke GitHub karena berisi password DB)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Database backup / SQL exports
+# (Melihat di gambar ada file db_relawan_opd_export.sql, sebaiknya diignore agar tidak berat)
+*.sql
+
+# Debug logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
