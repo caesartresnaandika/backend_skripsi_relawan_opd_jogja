@@ -6,7 +6,7 @@ Buat file baru bernama README.md.
 Copy dan Paste teks di bawah ini:
 
 Markdown
-# Backend Sistem Relawan OPD - JGOJA
+# Backend Sistem Relawan OPD - JOGJA
 
 Repositori ini berisi source code backend untuk aplikasi manajemen relawan OPD menggunakan Node.js, TypeScript, dan PostgreSQL.
 
