@@ -62,14 +62,3 @@ src/ : Source code utama (Controllers, Routes, Middlewares).
 config/ : Konfigurasi database dan sistem.
 
 db_relawan_opd_export.sql : File dump database PostgreSQL.
-
-
----
-
-### Langkah Terakhir untuk Kamu (Push ke GitHub):
-Setelah file `README.md` ini kamu simpan, jangan lupa untuk mengirimnya ke GitHub bersama file backup database tadi:
-
-```cmd
-git add .
-git commit -m "Add README.md and database backup for collaboration"
-git push origin main
