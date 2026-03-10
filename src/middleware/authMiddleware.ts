@@ -27,4 +27,25 @@ const verifyToken = (req: AuthRequest, res: Response, next: NextFunction): void 
     }
 };
 
+// === MIDDLEWARE KHUSUS RBAC (ROLE-BASED ACCESS CONTROL) ===
+export const authorizeRole = (...allowedRoles: string[]) => {
+    return (req: AuthRequest, res: Response, next: NextFunction): void => {
+        // Pastikan verifyToken sudah dijalankan sebelumnya sehingga req.user ada
+        if (!req.user || !req.user.role) {
+            res.status(403).json({ message: 'Akses Ditolak! Role tidak ditemukan.' });
+            return;
+        }
+
+        // Cek apakah role user saat ini ada di dalam daftar allowedRoles
+        if (!allowedRoles.includes(req.user.role)) {
+            res.status(403).json({
+                message: `Akses Ditolak! Halaman ini hanya untuk role: ${allowedRoles.join(', ')}`
+            });
+            return;
+        }
+
+        next(); // Lanjut ke controller jika role sesuai
+    };
+};
+
 export default verifyToken;

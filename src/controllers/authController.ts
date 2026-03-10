@@ -34,6 +34,7 @@ export const register = async (req: Request, res: Response) => {
     }
 };
 
+
 // === 2. FITUR LOGIN (Inti Skripsi) ===
 export const login = async (req: Request, res: Response) => {
     const { nik, password } = req.body;
