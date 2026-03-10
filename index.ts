@@ -8,6 +8,8 @@ import relawanRoutes from './src/routes/relawanRoutes';
 import bpjsRoutes from './src/routes/bpjsRoutes';
 import opdRoutes from './src/routes/opdRoutes';
 import relawanAdminRoutes from './src/routes/relawanAdminRoutes';
+import skRoutes from './src/routes/skRoutes';
+import dashboardRoutes from './src/routes/dashboardRoutes';
 
 dotenv.config();
 
@@ -23,6 +25,8 @@ app.use('/api/relawan', relawanRoutes); // http://localhost:3000/api/relawan
 app.use('/api/bpjs', bpjsRoutes);       // http://localhost:3000/api/bpjs
 app.use('/api/opd', opdRoutes);         // http://localhost:3000/api/opd
 app.use('/api/admin/relawan', relawanAdminRoutes); // http://localhost:3000/api/admin/relawan
+app.use('/api/admin/sk', skRoutes);     // http://localhost:3000/api/admin/sk
+app.use('/api/admin/dashboard', dashboardRoutes); // http://localhost:3000/api/admin/dashboard
 
 // Test Root
 app.get('/', (req: Request, res: Response) => {
