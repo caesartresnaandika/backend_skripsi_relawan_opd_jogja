@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS public.kegiatan_relawan
     CONSTRAINT kegiatan_relawan_pkey PRIMARY KEY (kegiatan_id)
 );
 
+ALTER TABLE IF EXISTS public.kegiatan_relawan
+    ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.komunitas
 (
     komunitas_id serial NOT NULL,
@@ -56,6 +59,9 @@ CREATE TABLE IF NOT EXISTS public.opd
     CONSTRAINT opd_pkey PRIMARY KEY (opd_id)
 );
 
+ALTER TABLE IF EXISTS public.opd
+    ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.pengajuan_perubahan_data
 (
     pengajuan_id serial NOT NULL,
@@ -71,6 +77,9 @@ CREATE TABLE IF NOT EXISTS public.pengajuan_perubahan_data
     verifikator_id integer,
     CONSTRAINT pengajuan_perubahan_data_pkey PRIMARY KEY (pengajuan_id)
 );
+
+ALTER TABLE IF EXISTS public.pengajuan_perubahan_data
+    ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.pengelola_opd
 (
@@ -97,6 +106,9 @@ CREATE TABLE IF NOT EXISTS public.penugasan_relawan
     CONSTRAINT uniq_penugasan_relawan_opd UNIQUE (relawan_id, opd_id)
 );
 
+ALTER TABLE IF EXISTS public.penugasan_relawan
+    ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.relawan
 (
     relawan_id serial NOT NULL,
@@ -113,6 +125,9 @@ CREATE TABLE IF NOT EXISTS public.relawan
     CONSTRAINT relawan_pkey PRIMARY KEY (relawan_id),
     CONSTRAINT relawan_user_id_key UNIQUE (user_id)
 );
+
+ALTER TABLE IF EXISTS public.relawan
+    ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.saran_masukan
 (
@@ -136,6 +151,7 @@ CREATE TABLE IF NOT EXISTS public.surat_keputusan
     status status_keaktifan DEFAULT 'Aktif'::status_keaktifan,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    batas_aktit date,
     CONSTRAINT surat_keputusan_pkey PRIMARY KEY (sk_id),
     CONSTRAINT surat_keputusan_nomor_sk_key UNIQUE (nomor_sk)
 );
