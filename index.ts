@@ -10,6 +10,8 @@ import opdRoutes from './src/routes/opdRoutes';
 import relawanAdminRoutes from './src/routes/relawanAdminRoutes';
 import skRoutes from './src/routes/skRoutes';
 import dashboardRoutes from './src/routes/dashboardRoutes';
+import logRoutes from './src/routes/logRoutes';
+import opdAdminRoutes from './src/routes/opdAdminRoutes';
 
 dotenv.config();
 
@@ -27,6 +29,8 @@ app.use('/api/opd', opdRoutes);         // http://localhost:3000/api/opd
 app.use('/api/admin/relawan', relawanAdminRoutes); // http://localhost:3000/api/admin/relawan
 app.use('/api/admin/sk', skRoutes);     // http://localhost:3000/api/admin/sk
 app.use('/api/admin/dashboard', dashboardRoutes); // http://localhost:3000/api/admin/dashboard
+app.use('/api/admin/logs', logRoutes);  // http://localhost:3000/api/admin/logs
+app.use('/api/opd-admin', opdAdminRoutes); // http://localhost:3000/api/opd-admin
 
 // Test Root
 app.get('/', (req: Request, res: Response) => {
