@@ -85,12 +85,33 @@ Berikut adalah daftar endpoint API yang sudah selesai dikerjakan dan siap diinte
 
 ---
 
-## 🚧 Sedang Dalam Pengerjaan (To-Do List Next)
-Fitur-fitur ini belum dapat di-hit oleh Frontend karena dalam antrian pengerjaan backend selanjutnya:
-1. **Audit Logs** (`GET /api/admin/logs`) 
-2. **Endpoint khusus Admin OPD** (Dashboard OPD, Manajemen Kader, Filter SK OPD).
-3. **Endpoint khusus Relawan** (Dashboard Relawan, Update Biodata).
+### 6. Super Admin: Audit Logs (Selesai ✅)
+- `GET /api/admin/logs` : Endpoint pagination (`?page=1&limit=10`) untuk melihat riwayat aktivitas sistem. Mendukung pemfilteran melalui *query params* `action_type`, `start_date`, dan `end_date`.
+
+---
+
+### 7. Peran Admin OPD (Selesai ✅)
+*Perhatian: Rute-rute ini dilindungi middleware yang mengekstrak `opd_id` otomatis dari Token Login. Harap Login menggunakan NIK OPD!*
+- `GET /api/opd-admin/dashboard` : Statistik agregat dan data grafik khusus OPD bersangkutan.
+- `GET /api/opd-admin/kader` : List Kader (Komunitas) di instansinya.
+- `POST /api/opd-admin/kader` : Tambah Kader (Komunitas).
+- `PATCH /api/opd-admin/kader/:id` : Update nama/deskripsi Kader.
+- `DELETE /api/opd-admin/kader/:id` : Hapus Kader.
+- `GET /api/opd-admin/relawan` : List semua relawan yang pernah ditugaskan di OPD ini.
+- `GET /api/opd-admin/sk` : Daftar SK di mana OPD ini dilibatkan.
+
+---
+
+### 8. Peran Relawan & Publik (Selesai ✅)
+*Rute diamankan otomatis agar relawan HANYA bisa mengakses data miliknya sendiri melalui `relawan_id` (diambil dari Token JWT).*
+- `GET /api/relawan/dashboard` : Poin, total kegiatan, dan rincian SK Aktif yang berlaku saat ini.
+- `GET /api/relawan/profile` : Output data biodata dan profil dari database.
+- `POST /api/relawan/profile/update` : Mengirim pengajuan perubahan biodata ke admin (Catatan: Ini melakukan Insert ke keranjang pengajuan, bukan UPDATE langsung).
+- `GET /api/relawan/history` : Melihat sejarah pengerjaan dan status persetujuan data di masa lalu.
+
+---
 
 ## 📝 Catatan Khusus Untuk Frontend Developer
-- **Mengenai ID di URL:** Jika melihat pola url seperti `/api/admin/sk/:id`, huruf `:id` selalu merujuk pada format *Integer* dari database (misal `1`, `12`, `45`), BUKAN tipe serial alfanumerik panjang.
-- Jika menjumpai pesan Error 500 saat Testing di Postman/Browser, segera informasikan ke Backend Engineer beserta tangkapan layar respons JSON errornya (`dev_log`), karena kemungkinan besar itu menyangkut format payload JSON yang tidak cocok.
+1. **Mengenai ID di URL:** Jika melihat pola url seperti `/api/admin/sk/:id`, huruf `:id` selalu merujuk pada format *Integer* dari database (misal `1`, `12`, `45`), BUKAN tipe serial alfanumerik panjang.
+2. **Penanganan Error:** Jika menjumpai pesan Error 500 saat Testing di Postman/Browser, kemungkinan besar terkait format struktur JSON yang dikirim di *Body*. Hubungi Backend jika bingung.
+3. **Konsep Token:** Jangan pernah melewatkan penyematan *Authorization Bearer Token* kecuali pada endpoint Login & Register.

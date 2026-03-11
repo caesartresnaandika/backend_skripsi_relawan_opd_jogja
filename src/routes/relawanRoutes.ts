@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
-import { requireRelawanContext } from '../middleware/relawanContextMiddleware';
+import { requireRelawanContext } from '../middleware/relawanMiddleware';
 import { getRelawanDashboardStats } from '../controllers/relawanDashboardController';
 import { getMyProfile, requestProfileUpdate } from '../controllers/relawanProfileController';
 import { getMyHistory } from '../controllers/relawanHistoryController';
