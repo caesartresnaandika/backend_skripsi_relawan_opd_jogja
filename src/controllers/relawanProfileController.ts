@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
-import { RelawanAuthRequest } from '../middleware/relawanContextMiddleware';
+import { RelawanAuthRequest } from '../middleware/relawanMiddleware';
 
 // 1. Get Detail Lengkap Biodata
 export const getMyProfile = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
@@ -37,8 +37,8 @@ export const requestProfileUpdate = async (req: RelawanAuthRequest, res: Respons
         const { data_baru, catatan } = req.body;
 
         if (!data_baru) {
-             res.status(400).json({ success: false, message: 'Data perubahan wajib disertakan (JSON).' });
-             return;
+            res.status(400).json({ success: false, message: 'Data perubahan wajib disertakan (JSON).' });
+            return;
         }
 
         // Ambil data lama sebagai perbandingan/history

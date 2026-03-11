@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
-import { RelawanAuthRequest } from '../middleware/relawanContextMiddleware';
+import { RelawanAuthRequest } from '../middleware/relawanMiddleware';
 
 export const getRelawanDashboardStats = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
     try {
