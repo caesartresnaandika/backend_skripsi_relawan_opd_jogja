@@ -2,6 +2,13 @@
 -- Please log an issue at https://github.com/pgadmin-org/pgadmin4/issues/new/choose if you find any bugs, including reproduction steps.
 BEGIN;
 
+-- Tambahan: Definisi Tipe Data ENUM (tidak terekspor otomatis)
+CREATE TYPE public.jenis_kelamin AS ENUM ('L', 'P');
+CREATE TYPE public.status_keaktifan AS ENUM ('Aktif', 'Tidak Aktif', 'Cuti');
+CREATE TYPE public.status_kegiatan AS ENUM ('Berjalan', 'Selesai', 'Ditunda', 'Dibatalkan');
+CREATE TYPE public.status_pengajuan AS ENUM ('Menunggu Review', 'Diterima', 'Ditolak');
+CREATE TYPE public.user_role AS ENUM ('super_admin', 'opd', 'relawan');
+
 
 CREATE TABLE IF NOT EXISTS public.audit_logs
 (

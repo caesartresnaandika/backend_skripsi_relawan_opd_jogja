@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
-import { requireOpdContext } from '../middleware/opdContextMiddleware';
+import { requireOpdContext } from '../middleware/opdMiddleware';
 import { getOpdDashboardStats } from '../controllers/opdDashboardController';
 import { getKaderByOpd, createKader, updateKader, deleteKader } from '../controllers/kaderController';
 import { getRelawanByOpd, getSkByOpd } from '../controllers/opdRelawanController';
