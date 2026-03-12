@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
-import { OpdAuthRequest } from '../middleware/opdContextMiddleware';
+import { OpdAuthRequest } from '../middleware/opdMiddleware';
 
 // 1. Dapatkan Daftar Relawan yang bertugas di OPD ini
 export const getRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {

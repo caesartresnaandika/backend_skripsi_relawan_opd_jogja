@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
-import { OpdAuthRequest } from '../middleware/opdContextMiddleware';
+import { OpdAuthRequest } from '../middleware/opdMiddleware';
 
 export const getOpdDashboardStats = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
