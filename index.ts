@@ -12,6 +12,7 @@ import skRoutes from './src/routes/skRoutes';
 import dashboardRoutes from './src/routes/dashboardRoutes';
 import logRoutes from './src/routes/logRoutes';
 import opdAdminRoutes from './src/routes/opdAdminRoutes';
+import debugRoutes from './src/routes/debugRoutes';
 
 dotenv.config();
 
@@ -31,6 +32,7 @@ app.use('/api/admin/sk', skRoutes);     // http://localhost:3000/api/admin/sk
 app.use('/api/admin/dashboard', dashboardRoutes); // http://localhost:3000/api/admin/dashboard
 app.use('/api/admin/logs', logRoutes);  // http://localhost:3000/api/admin/logs
 app.use('/api/opd-admin', opdAdminRoutes); // http://localhost:3000/api/opd-admin
+app.use('/api/debug', debugRoutes); // http://localhost:3000/api/debug
 
 // Test Root
 app.get('/', (req: Request, res: Response) => {
