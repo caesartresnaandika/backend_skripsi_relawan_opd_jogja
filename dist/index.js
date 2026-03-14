@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -15,31 +6,46 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
-const db_1 = __importDefault(require("./config/db"));
+// Import Routes
 const authRoutes_1 = __importDefault(require("./src/routes/authRoutes"));
+const relawanRoutes_1 = __importDefault(require("./src/routes/relawanRoutes"));
+const bpjsRoutes_1 = __importDefault(require("./src/routes/bpjsRoutes"));
+const opdRoutes_1 = __importDefault(require("./src/routes/opdRoutes"));
+const relawanAdminRoutes_1 = __importDefault(require("./src/routes/relawanAdminRoutes"));
+const skRoutes_1 = __importDefault(require("./src/routes/skRoutes"));
+const dashboardRoutes_1 = __importDefault(require("./src/routes/dashboardRoutes"));
+const logRoutes_1 = __importDefault(require("./src/routes/logRoutes"));
+const opdAdminRoutes_1 = __importDefault(require("./src/routes/opdAdminRoutes"));
+const debugRoutes_1 = __importDefault(require("./src/routes/debugRoutes"));
+const saranRoutes_1 = __importDefault(require("./src/routes/saranRoutes"));
+const komunitasRoutes_1 = __importDefault(require("./src/routes/komunitasRoutes"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
-// --- 2. GUNAKAN ROUTES ---
-// Segala request ke /api/auth akan diurus oleh authRoutes
-app.use('/api/auth', authRoutes_1.default);
-// === TEST ROUTES (Opsional) ===
+// === DAFTAR ROUTES (API MAP) ===
+app.use('/api/auth', authRoutes_1.default); // http://localhost:3000/api/auth
+app.use('/api/relawan', relawanRoutes_1.default); // http://localhost:3000/api/relawan
+app.use('/api/bpjs', bpjsRoutes_1.default); // http://localhost:3000/api/bpjs
+app.use('/api/opd', opdRoutes_1.default); // http://localhost:3000/api/opd
+app.use('/api/admin/relawan', relawanAdminRoutes_1.default); // http://localhost:3000/api/admin/relawan
+app.use('/api/admin/sk', skRoutes_1.default); // http://localhost:3000/api/admin/sk
+app.use('/api/admin/dashboard', dashboardRoutes_1.default); // http://localhost:3000/api/admin/dashboard
+app.use('/api/admin/logs', logRoutes_1.default); // http://localhost:3000/api/admin/logs
+app.use('/api/opd-admin', opdAdminRoutes_1.default); // http://localhost:3000/api/opd-admin
+app.use('/api/saran', saranRoutes_1.default); // http://localhost:3000/api/saran
+app.use('/api/komunitas', komunitasRoutes_1.default); // http://localhost:3000/api/komunitas
+app.use('/api/debug', debugRoutes_1.default); // http://localhost:3000/api/debug
+// Test Root
 app.get('/', (req, res) => {
-    res.send('Halo Caesar! Server Backend Skripsi SUDAH NYALA! 🚀');
+    res.send('Server Backend Skripsi (TypeScript) Berjalan! 🚀');
 });
-app.get('/api/users', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const result = yield db_1.default.query('SELECT * FROM users');
-        res.json(result.rows);
-    }
-    catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
-    }
-}));
-// === MENYALAKAN SERVER (Cukup sekali saja di paling bawah) ===
+// Jalankan Server
 app.listen(PORT, () => {
     console.log(`Server berjalan di http://localhost:${PORT}`);
+});
+// Handle unhandled rejections
+process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled Rejection:', reason);
 });

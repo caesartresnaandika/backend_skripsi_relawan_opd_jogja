@@ -57,7 +57,7 @@ export const login = async (req: Request, res: Response) => {
         const token = jwt.sign(
             { id: user.rows[0].user_id, role: user.rows[0].role },
             process.env.JWT_SECRET || 'rahasia_skripsi_caesar', // Pastikan ada di .env
-            { expiresIn: '1h' }
+            { expiresIn: '2h' }
         );
 
         res.json({

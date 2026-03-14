@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAllOpd, getOpdById, createOpd, updateOpd, toggleOpdStatus } from '../controllers/opdController';
+import { getAllOpd, getOpdById, createOpd, createBulkOpd, updateOpd, toggleOpdStatus } from '../controllers/opdController';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -12,6 +12,9 @@ router.get('/', verifyToken, authorizeRole('super_admin'), getAllOpd);
 
 // URL: GET http://localhost:3000/api/opd/:id
 router.get('/:id', verifyToken, authorizeRole('super_admin'), getOpdById);
+
+// URL: POST http://localhost:3000/api/opd/bulk
+router.post('/bulk', verifyToken, authorizeRole('super_admin'), createBulkOpd);
 
 // URL: POST http://localhost:3000/api/opd
 router.post('/', verifyToken, authorizeRole('super_admin'), createOpd);

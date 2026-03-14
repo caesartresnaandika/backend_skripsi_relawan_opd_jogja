@@ -56,7 +56,7 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         }
         // 3. Buat Token (JWT) sebagai tiket masuk
         const token = jsonwebtoken_1.default.sign({ id: user.rows[0].user_id, role: user.rows[0].role }, process.env.JWT_SECRET || 'rahasia_skripsi_caesar', // Pastikan ada di .env
-        { expiresIn: '1h' });
+        { expiresIn: '2h' });
         res.json({
             message: 'Login Berhasil!',
             token: token,

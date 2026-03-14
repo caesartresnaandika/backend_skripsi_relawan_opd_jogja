@@ -88,6 +88,50 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
     }
 };
 
+export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<void> => {
+    const data = req.body;
+
+    if (!Array.isArray(data) || data.length === 0) {
+        res.status(400).json({ success: false, message: 'Data yang dikirim harus berupa array yang tidak kosong' });
+        return;
+    }
+
+    try {
+        // Prepare bulk insert query
+        const values: any[] = [];
+        const placeholders: string[] = [];
+        let index = 1;
+
+        data.forEach(item => {
+            placeholders.push(`($${index++}, $${index++}, $${index++}, $${index++}, $${index++})`);
+            values.push(
+                item.namaOpd || item.nama_opd,
+                item.alamat || null,
+                item.kontak || null,
+                item.pic || null,
+                item.status === 'Aktif' || item.is_active === true
+            );
+        });
+
+        const query = `
+            INSERT INTO opd (nama_opd, alamat, kontak, pic, is_active)
+            VALUES ${placeholders.join(', ')}
+            RETURNING *;
+        `;
+
+        const result = await executeQueryWithContext(query, values, req.user);
+
+        res.status(201).json({
+            success: true,
+            message: `Berhasil menambahkan ${result.rowCount} data OPD baru dari Excel`,
+            insertedCount: result.rowCount
+        });
+    } catch (error: any) {
+        console.error('Error in createBulkOpd:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server saat import data Excel', errorDetail: error.message });
+    }
+};
+
 export const updateOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     const { nama_opd, alamat, kontak, pic } = req.body;

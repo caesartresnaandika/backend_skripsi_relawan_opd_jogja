@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS public.komunitas
     opd_id integer NOT NULL,
     nama_komunitas character varying(100) COLLATE pg_catalog."default" NOT NULL,
     deskripsi text COLLATE pg_catalog."default",
+    pic character varying(100) COLLATE pg_catalog."default",
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT komunitas_pkey PRIMARY KEY (komunitas_id)

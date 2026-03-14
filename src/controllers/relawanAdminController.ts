@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
+import bcrypt from 'bcrypt';
 
 // 1. Dapatkan semua relawan dengan detail informasi User, Relawan, dan OPD Penugasan
 export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -139,3 +140,121 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
         res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
     }
 };
+
+export const createBulkRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
+    const data = req.body;
+
+    if (!Array.isArray(data) || data.length === 0) {
+        res.status(400).json({ success: false, message: 'Data yang dikirim harus berupa array yang tidak kosong' });
+        return;
+    }
+
+    try {
+        let insertedCount = 0;
+        const skippedNIK: string[] = [];
+        
+        for (const item of data) {
+            const defaultPassword = process.env.DEFAULT_RELAWAN_PASSWORD || 'rahasia123';
+            
+            const checkQuery = `SELECT user_id FROM users WHERE nik = $1`;
+            const checkRes = await executeQueryWithContext(checkQuery, [item.nik], req.user);
+            
+            if (checkRes.rows.length > 0) {
+                skippedNIK.push(item.nik);
+                continue; // Skip jika NIK sudah ada
+            }
+
+            // 1. Insert ke tabel users
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(defaultPassword, salt);
+             
+            const insertUserQuery = `
+                INSERT INTO users (nik, nama_lengkap, password, role, is_active)
+                VALUES ($1, $2, $3, 'relawan', true)
+                RETURNING user_id;
+            `;
+            const userRes = await executeQueryWithContext(insertUserQuery, [
+                item.nik, 
+                item.namaLengkap || item.nama_lengkap, 
+                hashedPassword
+            ], req.user);
+            const userId = userRes.rows[0].user_id;
+
+            // 2. Insert ke tabel relawan
+            // Mapping fleksibel: terima dari Excel ('jenis kelamin', 'penugasaan') atau form manual ('jenis_kelamin', 'alamat_ktp', 'penugasan')
+            const jenisKelamin = item['jenis kelamin'] || item.jenis_kelamin || item.jenisKelamin || 'L';
+            const alamat = item.alamat_ktp || item.alamat || '-';
+            const kelurahan = item.kelurahan || '-';
+            const penugasan = item.penugasaan || item.penugasan || '-'; // penugasaan = dari Excel (typo di template lama), penugasan = dari form manual
+            const kader = item.kader || '-';
+            const jabatan = item.jabatan || '-';
+
+            const insertRelawanQuery = `
+                INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan, penugasan)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING relawan_id;
+            `;
+            const relawanRes = await executeQueryWithContext(insertRelawanQuery, [
+                userId, 
+                jenisKelamin,
+                alamat,
+                kelurahan,
+                penugasan
+            ], req.user);
+            const relawanId = relawanRes.rows[0].relawan_id;
+
+            // 3. Jika opd_id disertakan, buat record penugasan_relawan
+            if (item.opd_id) {
+                const insertPenugasanQuery = `
+                    INSERT INTO penugasan_relawan (relawan_id, opd_id, komunitas_id, status_keaktifan)
+                    VALUES ($1, $2, $3, 'Aktif')
+                    ON CONFLICT (relawan_id, opd_id) DO NOTHING;
+                `;
+                await executeQueryWithContext(insertPenugasanQuery, [
+                    relawanId,
+                    item.opd_id,
+                    item.komunitas_id || null
+                ], req.user);
+            }
+            
+            insertedCount++;
+        }
+
+        res.status(201).json({
+            success: true,
+            message: `Berhasil menambahkan ${insertedCount} relawan baru${skippedNIK.length > 0 ? `. ${skippedNIK.length} NIK dilewati karena sudah terdaftar.` : ''}`,
+            data: { insertedCount, skippedNIK }
+        });
+    } catch (error: any) {
+        console.error('Error in createBulkRelawan:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Terjadi kesalahan pada server saat menyimpan data relawan', 
+            errorDetail: error.message 
+        });
+    }
+};
+
+// Endpoint helper: dapatkan daftar komunitas berdasarkan opd_id (untuk dropdown di form)
+export const getKomunitasByOpd = async (req: AuthRequest, res: Response): Promise<void> => {
+    const { opd_id } = req.query;
+    try {
+        let query: string;
+        let params: any[];
+
+        if (opd_id) {
+            query = `SELECT komunitas_id, nama_komunitas, opd_id FROM komunitas WHERE opd_id = $1 ORDER BY nama_komunitas`;
+            params = [opd_id];
+        } else {
+            query = `SELECT komunitas_id, nama_komunitas, opd_id FROM komunitas ORDER BY nama_komunitas`;
+            params = [];
+        }
+
+        const result = await executeQueryWithContext(query, params, req.user);
+        res.status(200).json({ success: true, data: result.rows });
+    } catch (error: any) {
+        console.error('Error in getKomunitasByOpd:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
+    }
+};
+

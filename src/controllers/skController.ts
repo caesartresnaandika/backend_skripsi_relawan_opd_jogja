@@ -82,15 +82,40 @@ export const getSKById = async (req: AuthRequest, res: Response): Promise<void> 
 // Perhatikan: Karena ini butuh multiple query yang saling berhubungan dengan logic khusus (Looping),
 // kita akan meminjam client khusus dan melakukan Transaksi Manual (BEGIN/ROLLBACK) di sni.
 export const createSKDetail = async (req: AuthRequest, res: Response): Promise<void> => {
+    // Karena pakai FormData, data kompleks seperti array (daftar_relawan) dikirim sebagai string JSON
     const { 
         nomor_sk, judul_sk, tanggal_terbit, batas_aktif, 
-        opd_id, komunitas_id, daftar_relawan 
+        opd_id, komunitas_id, daftar_relawan: daftar_relawan_str
     } = req.body;
+
+    const file = req.file;
+
+    // Parse array daftar_relawan dari string JSON jika ada
+    let daftar_relawan: any[] = [];
+    if (daftar_relawan_str) {
+        try {
+            daftar_relawan = JSON.parse(daftar_relawan_str);
+        } catch (e) {
+            console.error('Failed to parse daftar_relawan json string:', e);
+        }
+    }
 
     // Validasi basic
     if (!nomor_sk || !opd_id) {
         res.status(400).json({ success: false, message: 'Nomor SK dan OPD wajib diisi' });
         return;
+    }
+
+    // Tentukan URL File
+    // UNTUK SEMENTARA: Kita biarkan dummy path atau base64 mock jika tidak terhubung Supabase / Railway Storage
+    // Pada implementasi asli, upload file buffer (req.file.buffer) ke Supabase Storage, lalu dapatkan URL-nya
+    let fileUrl = 'Diunggah Melalui Sistem Excel JSON';
+    if (file) {
+        // Contoh implementasi S3 / Supabase Upload (Mocked logic):
+        // const { data, error } = await supabase.storage.from('sk-documents').upload(`sk-${Date.now()}-${file.originalname}`, file.buffer);
+        // fileUrl = data.publicUrl;
+        
+        fileUrl = `/uploads/${Date.now()}-${file.originalname}`; // Dummy path
     }
 
     // Pinjam 1 koneksi khusus untuk transaksi panjang ini
@@ -106,7 +131,6 @@ export const createSKDetail = async (req: AuthRequest, res: Response): Promise<v
         }
 
         // TAHAP 1: Simpan Master SK
-        // Catatan: Karena fitur Upload File Fisik belum dibuat, kita berikan teks keterangan default di file_path
         const insertSKQuery = `
             INSERT INTO surat_keputusan (nomor_sk, judul_sk, tanggal_terbit, batas_aktif, opd_id, file_path)
             VALUES ($1, $2, $3, $4, $5, $6)
@@ -114,7 +138,7 @@ export const createSKDetail = async (req: AuthRequest, res: Response): Promise<v
         `;
         const skValues = [
             nomor_sk, judul_sk, tanggal_terbit || null, batas_aktif || null, 
-            opd_id, 'Diunggah Melalui Sistem Excel JSON' // Dummy file_path karena NOT NULL di postgres
+            opd_id, fileUrl 
         ];
         
         const skResult = await client.query(insertSKQuery, skValues);

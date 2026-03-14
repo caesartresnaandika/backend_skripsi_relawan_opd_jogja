@@ -13,6 +13,8 @@ import dashboardRoutes from './src/routes/dashboardRoutes';
 import logRoutes from './src/routes/logRoutes';
 import opdAdminRoutes from './src/routes/opdAdminRoutes';
 import debugRoutes from './src/routes/debugRoutes';
+import saranRoutes from './src/routes/saranRoutes';
+import komunitasRoutes from './src/routes/komunitasRoutes';
 
 dotenv.config();
 
@@ -32,6 +34,8 @@ app.use('/api/admin/sk', skRoutes);     // http://localhost:3000/api/admin/sk
 app.use('/api/admin/dashboard', dashboardRoutes); // http://localhost:3000/api/admin/dashboard
 app.use('/api/admin/logs', logRoutes);  // http://localhost:3000/api/admin/logs
 app.use('/api/opd-admin', opdAdminRoutes); // http://localhost:3000/api/opd-admin
+app.use('/api/saran', saranRoutes);         // http://localhost:3000/api/saran
+app.use('/api/komunitas', komunitasRoutes); // http://localhost:3000/api/komunitas
 app.use('/api/debug', debugRoutes); // http://localhost:3000/api/debug
 
 // Test Root
