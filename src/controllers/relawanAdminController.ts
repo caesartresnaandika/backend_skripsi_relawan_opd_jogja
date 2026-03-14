@@ -10,6 +10,7 @@ export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<vo
             SELECT 
                 u.user_id, u.nik, u.nama_lengkap, u.email, u.no_hp, u.is_active,
                 r.relawan_id, r.jenis_kelamin, r.tempat_lahir, r.tanggal_lahir,
+                r.alamat_ktp, r.kelurahan, r.penugasan AS penugasan_teks,
                 pr.status_keaktifan AS status_penugasan,
                 o.nama_opd, k.nama_komunitas
             FROM users u
