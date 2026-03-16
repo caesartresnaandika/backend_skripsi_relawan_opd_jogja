@@ -35,7 +35,7 @@ app.use('/api/admin/dashboard', dashboardRoutes); // http://localhost:3000/api/a
 app.use('/api/admin/logs', logRoutes);  // http://localhost:3000/api/admin/logs
 app.use('/api/opd-admin', opdAdminRoutes); // http://localhost:3000/api/opd-admin
 app.use('/api/saran', saranRoutes);         // http://localhost:3000/api/saran
-app.use('/api/komunitas', komunitasRoutes); // http://localhost:3000/api/komunitas
+app.use('/api/kader', komunitasRoutes); // http://localhost:3000/api/komunitas
 app.use('/api/debug', debugRoutes); // http://localhost:3000/api/debug
 
 // Test Root
