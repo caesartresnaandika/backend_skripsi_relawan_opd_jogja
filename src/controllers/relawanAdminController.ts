@@ -181,40 +181,71 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
             ], req.user);
             const userId = userRes.rows[0].user_id;
 
-            // 2. Insert ke tabel relawan
-            // Mapping fleksibel: terima dari Excel ('jenis kelamin', 'penugasaan') atau form manual ('jenis_kelamin', 'alamat_ktp', 'penugasan')
+            // 2. Insert ke tabel relawan (tanpa kolom penugasan - sudah dipindah ke penugasan_relawan)
             const jenisKelamin = item['jenis kelamin'] || item.jenis_kelamin || item.jenisKelamin || 'L';
             const alamat = item.alamat_ktp || item.alamat || '-';
             const kelurahan = item.kelurahan || '-';
-            const penugasan = item.penugasaan || item.penugasan || '-'; // penugasaan = dari Excel (typo di template lama), penugasan = dari form manual
-            const kader = item.kader || '-';
-            const jabatan = item.jabatan || '-';
+            const jabatan = item.jabatan || null;
 
             const insertRelawanQuery = `
-                INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan, penugasan)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                VALUES ($1, $2, $3, $4)
                 RETURNING relawan_id;
             `;
             const relawanRes = await executeQueryWithContext(insertRelawanQuery, [
                 userId, 
                 jenisKelamin,
                 alamat,
-                kelurahan,
-                penugasan
+                kelurahan
             ], req.user);
             const relawanId = relawanRes.rows[0].relawan_id;
 
-            // 3. Jika opd_id disertakan, buat record penugasan_relawan
-            if (item.opd_id) {
+            // 3. Lookup opd_id dari nama OPD yang diketik (jika ada)
+            // item.penugasan = nama OPD (dari autocomplete), item.opd_id = ID langsung (dari Excel)
+            let opdId: number | null = item.opd_id || null;
+            const namaOpd = item.penugasan || item.penugasaan || null; // penugasaan = typo dari Excel lama
+
+            if (!opdId && namaOpd && namaOpd !== '-') {
+                const opdLookup = await executeQueryWithContext(
+                    `SELECT opd_id FROM opd WHERE LOWER(nama_opd) = LOWER($1) LIMIT 1`,
+                    [namaOpd], req.user
+                );
+                if (opdLookup.rows.length > 0) {
+                    opdId = opdLookup.rows[0].opd_id;
+                }
+            }
+
+            // 4. Lookup komunitas_id dari nama kader yang diketik (jika ada)
+            let komunitasId: number | null = item.komunitas_id || null;
+            const namaKader = item.kader || null;
+
+            if (!komunitasId && namaKader && namaKader !== '-') {
+                const kaderLookup = await executeQueryWithContext(
+                    `SELECT komunitas_id FROM komunitas WHERE LOWER(nama_komunitas) = LOWER($1)${opdId ? ' AND opd_id = $2' : ''} LIMIT 1`,
+                    opdId ? [namaKader, opdId] : [namaKader], req.user
+                );
+                if (kaderLookup.rows.length > 0) {
+                    komunitasId = kaderLookup.rows[0].komunitas_id;
+                }
+            }
+
+            // 5. Insert ke penugasan_relawan jika ada opd_id yang valid
+            if (opdId) {
                 const insertPenugasanQuery = `
-                    INSERT INTO penugasan_relawan (relawan_id, opd_id, komunitas_id, status_keaktifan)
-                    VALUES ($1, $2, $3, 'Aktif')
-                    ON CONFLICT (relawan_id, opd_id) DO NOTHING;
+                    INSERT INTO penugasan_relawan (relawan_id, opd_id, komunitas_id, jabatan, penugasan, status_keaktifan)
+                    VALUES ($1, $2, $3, $4, $5, 'Aktif')
+                    ON CONFLICT (relawan_id, opd_id) DO UPDATE
+                        SET komunitas_id = EXCLUDED.komunitas_id,
+                            jabatan = EXCLUDED.jabatan,
+                            penugasan = EXCLUDED.penugasan,
+                            updated_at = CURRENT_TIMESTAMP;
                 `;
                 await executeQueryWithContext(insertPenugasanQuery, [
                     relawanId,
-                    item.opd_id,
-                    item.komunitas_id || null
+                    opdId,
+                    komunitasId,
+                    jabatan,
+                    namaOpd         // simpan teks penugasan juga sebagai fallback
                 ], req.user);
             }
             
