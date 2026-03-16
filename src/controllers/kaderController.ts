@@ -8,13 +8,13 @@ export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise
         const opdId = req.opd_id;
 
         const result = await executeQueryWithContext(`
-            SELECT k.komunitas_id, k.nama_komunitas, k.deskripsi, 
+            SELECT k.kader_id, k.nama_kader, k.deskripsi, 
                    COUNT(pr.relawan_id) as jumlah_anggota
-            FROM komunitas k
-            LEFT JOIN penugasan_relawan pr ON k.komunitas_id = pr.komunitas_id
+            FROM kader k
+            LEFT JOIN penugasan_relawan pr ON k.kader_id = pr.kader_id
             WHERE k.opd_id = $1
-            GROUP BY k.komunitas_id
-            ORDER BY k.nama_komunitas ASC
+            GROUP BY k.kader_id
+            ORDER BY k.nama_kader ASC
         `, [opdId], req.user);
 
         res.status(200).json({
@@ -31,22 +31,22 @@ export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise
 export const createKader = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
         const opdId = req.opd_id;
-        const { nama_komunitas, deskripsi } = req.body;
+        const { nama_kader, deskripsi } = req.body;
 
-        if (!nama_komunitas) {
-            res.status(400).json({ success: false, message: 'Nama komunitas wajib diisi' });
+        if (!nama_kader) {
+            res.status(400).json({ success: false, message: 'Nama kader wajib diisi' });
             return;
         }
 
         const result = await executeQueryWithContext(`
-            INSERT INTO komunitas (opd_id, nama_komunitas, deskripsi)
+            INSERT INTO kader (opd_id, nama_kader, deskripsi)
             VALUES ($1, $2, $3)
             RETURNING *
-        `, [opdId, nama_komunitas, deskripsi], req.user);
+        `, [opdId, nama_kader, deskripsi], req.user);
 
         res.status(201).json({
             success: true,
-            message: 'Kader/Komunitas berhasil ditambahkan',
+            message: 'Kader/kader berhasil ditambahkan',
             data: result.rows[0]
         });
     } catch (error: any) {
@@ -60,11 +60,11 @@ export const updateKader = async (req: OpdAuthRequest, res: Response): Promise<v
     try {
         const opdId = req.opd_id;
         const kaderId = parseInt(req.params.id as string);
-        const { nama_komunitas, deskripsi } = req.body;
+        const { nama_kader, deskripsi } = req.body;
 
-        // Pastikan komunitas ini benar-benar milik OPD yang login
+        // Pastikan kader ini benar-benar milik OPD yang login
         const findQuery = await executeQueryWithContext(
-            `SELECT * FROM komunitas WHERE komunitas_id = $1 AND opd_id = $2`,
+            `SELECT * FROM kader WHERE kader_id = $1 AND opd_id = $2`,
             [kaderId, opdId], req.user
         );
 
@@ -74,11 +74,11 @@ export const updateKader = async (req: OpdAuthRequest, res: Response): Promise<v
         }
 
         const result = await executeQueryWithContext(`
-            UPDATE komunitas 
-            SET nama_komunitas = $1, deskripsi = $2, updated_at = CURRENT_TIMESTAMP
-            WHERE komunitas_id = $3
+            UPDATE kader 
+            SET nama_kader = $1, deskripsi = $2, updated_at = CURRENT_TIMESTAMP
+            WHERE kader_id = $3
             RETURNING *
-        `, [nama_komunitas, deskripsi, kaderId], req.user);
+        `, [nama_kader, deskripsi, kaderId], req.user);
 
         res.status(200).json({
             success: true,
@@ -98,7 +98,7 @@ export const deleteKader = async (req: OpdAuthRequest, res: Response): Promise<v
         const kaderId = parseInt(req.params.id as string);
 
         const result = await executeQueryWithContext(
-            `DELETE FROM komunitas WHERE komunitas_id = $1 AND opd_id = $2 RETURNING *`,
+            `DELETE FROM kader WHERE kader_id = $1 AND opd_id = $2 RETURNING *`,
             [kaderId, opdId], req.user
         );
 

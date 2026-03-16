@@ -10,11 +10,11 @@ export const getRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promi
         const result = await executeQueryWithContext(`
             SELECT 
                 r.relawan_id, u.nama_lengkap, u.nik, r.alamat_domisili, r.kelurahan,
-                k.nama_komunitas as kader, pr.status_keaktifan
+                k.nama_kader as kader, pr.status_keaktifan
             FROM penugasan_relawan pr
             JOIN relawan r ON pr.relawan_id = r.relawan_id
             JOIN users u ON r.user_id = u.user_id
-            LEFT JOIN komunitas k ON pr.komunitas_id = k.komunitas_id
+            LEFT JOIN kader k ON pr.kader_id = k.kader_id
             WHERE pr.opd_id = $1
             ORDER BY u.nama_lengkap ASC
         `, [opdId], req.user);

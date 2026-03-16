@@ -31,16 +31,16 @@ export const getOpdDashboardStats = async (req: OpdAuthRequest, res: Response): 
 
             // 3. Jumlah Kader Aktif milik OPD
             executeQueryWithContext(`
-                SELECT COUNT(*) as total FROM komunitas WHERE opd_id = $1
+                SELECT COUNT(*) as total FROM kader WHERE opd_id = $1
             `, [opdId], req.user),
 
-            // 4. Grafik: Relawan per Kader (Komunitas) di OPD
+            // 4. Grafik: Relawan per Kader (kader) di OPD
             executeQueryWithContext(`
-                SELECT k.nama_komunitas, COUNT(pr.relawan_id) as jumlah_relawan
-                FROM komunitas k
-                LEFT JOIN penugasan_relawan pr ON k.komunitas_id = pr.komunitas_id AND pr.status_keaktifan = 'Aktif'
+                SELECT k.nama_kader, COUNT(pr.relawan_id) as jumlah_relawan
+                FROM kader k
+                LEFT JOIN penugasan_relawan pr ON k.kader_id = pr.kader_id AND pr.status_keaktifan = 'Aktif'
                 WHERE k.opd_id = $1
-                GROUP BY k.komunitas_id, k.nama_komunitas
+                GROUP BY k.kader_id, k.nama_kader
                 ORDER BY jumlah_relawan DESC
             `, [opdId], req.user),
 
@@ -63,7 +63,7 @@ export const getOpdDashboardStats = async (req: OpdAuthRequest, res: Response): 
                     total_kader_aktif: parseInt(totalKaderRes.rows[0].total, 10)
                 },
                 grafik_relawan_per_kader: chartRelawanPerKaderRes.rows.map(row => ({
-                    nama_kader: row.nama_komunitas,
+                    nama_kader: row.nama_kader,
                     jumlah_relawan: parseInt(row.jumlah_relawan, 10)
                 })),
                 grafik_status_penugasan: chartStatusPenugasanRes.rows.map(row => ({

@@ -5,7 +5,7 @@ import { getDashboardStats } from '../controllers/dashboardController';
 const router = Router();
 
 // Endpoint dilindungi, khusus Super Admin
-router.use(verifyToken, authorizeRole('super_admin'));
+router.use(verifyToken, authorizeRole('super_admin', 'opd'));
 
 // GET /api/admin/dashboard
 router.get('/', getDashboardStats);

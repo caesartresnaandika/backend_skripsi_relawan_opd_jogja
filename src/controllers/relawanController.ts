@@ -6,15 +6,15 @@ export const getAllRelawan = async (req: Request, res: Response) => {
   try {
     const { keyword } = req.query; // Ambil parameter ?keyword=nama
 
-    // Query JOIN Lengkap (User + Relawan + Komunitas + OPD)
+    // Query JOIN Lengkap (User + Relawan + kader + OPD)
     let query = `
       SELECT 
         r.relawan_id, r.nik, u.nama_lengkap, 
         r.jenis_kelamin, r.no_hp, r.status_bpjs_aktif,
-        k.nama_komunitas, o.nama_opd 
+        k.nama_kader, o.nama_opd 
       FROM relawan r
       JOIN users u ON r.user_id = u.user_id
-      JOIN komunitas k ON r.komunitas_id = k.komunitas_id
+      JOIN kader k ON r.kader_id = k.kader_id
       JOIN opd o ON k.opd_id = o.opd_id
     `;
 
@@ -40,10 +40,10 @@ export const getRelawanById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      `SELECT r.*, u.nama_lengkap, k.nama_komunitas, o.nama_opd
+      `SELECT r.*, u.nama_lengkap, k.nama_kader, o.nama_opd
        FROM relawan r 
        JOIN users u ON r.user_id = u.user_id
-       JOIN komunitas k ON r.komunitas_id = k.komunitas_id
+       JOIN kader k ON r.kader_id = k.kader_id
        JOIN opd o ON k.opd_id = o.opd_id
        WHERE r.relawan_id = $1`,
       [id]

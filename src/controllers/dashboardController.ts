@@ -29,7 +29,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
 
             // 3. Total Kader/Komunitas
             executeQueryWithContext(`
-                SELECT COUNT(*) as total FROM komunitas
+                SELECT COUNT(*) as total FROM kader
             `, [], req.user),
 
             // 4. Pengajuan Menunggu Review

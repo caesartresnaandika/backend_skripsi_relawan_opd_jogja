@@ -6,6 +6,7 @@ import {
     getPengajuanPerubahanDaftar, 
     reviewPengajuan,
     createBulkRelawan,
+    createRelawan,
     getKomunitasByOpd
 } from '../controllers/relawanAdminController';
 
@@ -16,6 +17,9 @@ router.use(verifyToken, authorizeRole('super_admin'));
 
 // URL: GET http://localhost:3000/api/admin/relawan
 router.get('/', getAllRelawan);
+
+// URL: POST http://localhost:3000/api/admin/relawan
+router.post('/', createRelawan);
 
 // URL: POST http://localhost:3000/api/admin/relawan/bulk
 router.post('/bulk', createBulkRelawan);

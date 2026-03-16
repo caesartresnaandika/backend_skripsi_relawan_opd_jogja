@@ -16,11 +16,11 @@ export const getMyHistory = async (req: RelawanAuthRequest, res: Response): Prom
                 SELECT 
                     pr.status_keaktifan, pr.created_at, pr.updated_at,
                     sk.nomor_sk, sk.judul_sk, sk.batas_aktif,
-                    o.nama_opd, k.nama_komunitas
+                    o.nama_opd, k.nama_kader
                 FROM penugasan_relawan pr
                 JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id
                 JOIN opd o ON pr.opd_id = o.opd_id
-                LEFT JOIN komunitas k ON pr.komunitas_id = k.komunitas_id
+                LEFT JOIN kader k ON pr.kader_id = k.kader_id
                 WHERE pr.relawan_id = $1
                 ORDER BY pr.created_at DESC
             `, [relawanId], req.user),

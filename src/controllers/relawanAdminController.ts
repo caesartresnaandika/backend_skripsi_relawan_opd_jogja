@@ -12,12 +12,12 @@ export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<vo
                 r.relawan_id, r.jenis_kelamin,
                 r.alamat_ktp, r.kelurahan,
                 pr.penugasan, pr.status_keaktifan AS status_penugasan,
-                o.nama_opd, k.nama_komunitas
+                o.nama_opd, k.nama_kader
             FROM users u
             JOIN relawan r ON u.user_id = r.user_id
             LEFT JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
             LEFT JOIN opd o ON pr.opd_id = o.opd_id
-            LEFT JOIN komunitas k ON pr.komunitas_id = k.komunitas_id
+            LEFT JOIN kader k ON pr.kader_id = k.kader_id
             WHERE u.role = 'relawan'
             ORDER BY u.created_at DESC;
         `;
@@ -43,12 +43,12 @@ export const getRelawanById = async (req: AuthRequest, res: Response): Promise<v
                 u.user_id, u.nik, u.nama_lengkap, u.email, u.no_hp, u.foto_profil, u.is_active,
                 r.relawan_id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
                 pr.penugasan_id, pr.penugasan, pr.jabatan, pr.status_keaktifan AS status_penugasan, pr.nomor_sk_manual,
-                o.nama_opd, k.nama_komunitas
+                o.nama_opd, k.nama_kader
             FROM users u
             JOIN relawan r ON u.user_id = r.user_id
             LEFT JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
             LEFT JOIN opd o ON pr.opd_id = o.opd_id
-            LEFT JOIN komunitas k ON pr.komunitas_id = k.komunitas_id
+            LEFT JOIN kader k ON pr.kader_id = k.kader_id
             WHERE u.user_id = $1 AND u.role = 'relawan';
         `;
         const result = await executeQueryWithContext(query, [id], req.user);
@@ -142,6 +142,111 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
     }
 };
 
+// 5. Tambah Relawan (Single Form)
+export const createRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
+    // Form input: Nama, NIK, Alamat KTP, Kelurahan, Jabatan, Penugasan (OPD), Kader/kader
+    const nama_lengkap = req.body.nama || req.body.nama_lengkap;
+    const nik = req.body.nik;
+    const alamat_ktp = req.body.alamat_ktp;
+    const kelurahan = req.body.kelurahan;
+    const jabatan = req.body.jabatan;
+    const penugasanText = req.body.penugasan || req.body.opd;
+    const kaderText = req.body.kader || req.body.kader || req.body.kader_kader;
+    const jenis_kelamin = req.body.jenis_kelamin || 'L'; // Default Laki-laki
+
+    if (!nik || !nama_lengkap) {
+        res.status(400).json({ success: false, message: 'NIK dan Nama wajib diisi' });
+        return;
+    }
+
+    try {
+        // Handler error pengecekan jika ada NIK yang sama, tidak akan bisa disimpan
+        const checkNikQuery = `SELECT user_id FROM users WHERE nik = $1`;
+        const checkNikRes = await executeQueryWithContext(checkNikQuery, [nik], req.user);
+        
+        if (checkNikRes.rows.length > 0) {
+            res.status(400).json({ success: false, message: 'NIK sudah terdaftar, data tidak dapat disimpan' });
+            return;
+        }
+
+        const defaultPassword = process.env.DEFAULT_RELAWAN_PASSWORD || 'rahasia123';
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(defaultPassword, salt);
+
+        // 1. INSERT users
+        const insertUserQuery = `
+            INSERT INTO users (nik, nama_lengkap, password, role, is_active)
+            VALUES ($1, $2, $3, 'relawan', true)
+            RETURNING user_id;
+        `;
+        const userRes = await executeQueryWithContext(insertUserQuery, [nik, nama_lengkap, hashedPassword], req.user);
+        const userId = userRes.rows[0].user_id;
+
+        // 2. INSERT relawan
+        const insertRelawanQuery = `
+            INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+            VALUES ($1, $2, $3, $4)
+            RETURNING relawan_id;
+        `;
+        const relawanRes = await executeQueryWithContext(insertRelawanQuery, [
+            userId, 
+            jenis_kelamin, 
+            alamat_ktp || '-', 
+            kelurahan || '-'
+        ], req.user);
+        const relawanId = relawanRes.rows[0].relawan_id;
+
+        // 3. SELECT opd_id berdasarkan text dari autocomplete
+        let opdId: number | null = null;
+        if (penugasanText) {
+            const opdLookup = await executeQueryWithContext(
+                `SELECT opd_id FROM opd WHERE LOWER(nama_opd) = LOWER($1) LIMIT 1`,
+                [penugasanText], req.user
+            );
+            if (opdLookup.rows.length > 0) {
+                opdId = opdLookup.rows[0].opd_id;
+            }
+        }
+
+        // 4. SELECT kader_id berdasarkan text dari autocomplete
+        let kaderId: number | null = null;
+        if (kaderText) {
+            const paramKader = opdId ? [kaderText, opdId] : [kaderText];
+            const kaderQuery = opdId 
+                ? `SELECT kader_id FROM kader WHERE LOWER(nama_kader) = LOWER($1) AND opd_id = $2 LIMIT 1`
+                : `SELECT kader_id FROM kader WHERE LOWER(nama_kader) = LOWER($1) LIMIT 1`;
+
+            const kaderLookup = await executeQueryWithContext(kaderQuery, paramKader, req.user);
+            if (kaderLookup.rows.length > 0) {
+                kaderId = kaderLookup.rows[0].kader_id;
+            }
+        }
+
+        // 5. INSERT penugasan_relawan
+        // Pastikan menyimpan text penugasan juga walaupun opdId ditemukan (sesuai skema lama/fallback)
+        const insertPenugasanQuery = `
+            INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, penugasan, status_keaktifan)
+            VALUES ($1, $2, $3, $4, $5, 'Aktif')
+        `;
+        await executeQueryWithContext(insertPenugasanQuery, [
+            relawanId,
+            opdId,
+            kaderId,
+            jabatan || null,
+            penugasanText || null
+        ], req.user);
+
+        res.status(201).json({
+            success: true,
+            message: 'Berhasil menambahkan data relawan'
+        });
+
+    } catch (error: any) {
+        console.error('Error in createRelawan:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server saat menambahkan data relawan' });
+    }
+};
+
 export const createBulkRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
     const data = req.body;
 
@@ -215,27 +320,27 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                 }
             }
 
-            // 4. Lookup komunitas_id dari nama kader yang diketik (jika ada)
-            let komunitasId: number | null = item.komunitas_id || null;
+            // 4. Lookup kader_id dari nama kader yang diketik (jika ada)
+            let kaderId: number | null = item.kader_id || null;
             const namaKader = item.kader || null;
 
-            if (!komunitasId && namaKader && namaKader !== '-') {
+            if (!kaderId && namaKader && namaKader !== '-') {
                 const kaderLookup = await executeQueryWithContext(
-                    `SELECT komunitas_id FROM komunitas WHERE LOWER(nama_komunitas) = LOWER($1)${opdId ? ' AND opd_id = $2' : ''} LIMIT 1`,
+                    `SELECT kader_id FROM kader WHERE LOWER(nama_kader) = LOWER($1)${opdId ? ' AND opd_id = $2' : ''} LIMIT 1`,
                     opdId ? [namaKader, opdId] : [namaKader], req.user
                 );
                 if (kaderLookup.rows.length > 0) {
-                    komunitasId = kaderLookup.rows[0].komunitas_id;
+                    kaderId = kaderLookup.rows[0].kader_id;
                 }
             }
 
             // 5. Insert ke penugasan_relawan jika ada opd_id yang valid
             if (opdId) {
                 const insertPenugasanQuery = `
-                    INSERT INTO penugasan_relawan (relawan_id, opd_id, komunitas_id, jabatan, penugasan, status_keaktifan)
+                    INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, penugasan, status_keaktifan)
                     VALUES ($1, $2, $3, $4, $5, 'Aktif')
                     ON CONFLICT (relawan_id, opd_id) DO UPDATE
-                        SET komunitas_id = EXCLUDED.komunitas_id,
+                        SET kader_id = EXCLUDED.kader_id,
                             jabatan = EXCLUDED.jabatan,
                             penugasan = EXCLUDED.penugasan,
                             updated_at = CURRENT_TIMESTAMP;
@@ -243,7 +348,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                 await executeQueryWithContext(insertPenugasanQuery, [
                     relawanId,
                     opdId,
-                    komunitasId,
+                    kaderId,
                     jabatan,
                     namaOpd         // simpan teks penugasan juga sebagai fallback
                 ], req.user);
@@ -267,25 +372,25 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
     }
 };
 
-// Endpoint helper: dapatkan daftar komunitas berdasarkan opd_id (untuk dropdown di form)
-export const getKomunitasByOpd = async (req: AuthRequest, res: Response): Promise<void> => {
+// Endpoint helper: dapatkan daftar kader berdasarkan opd_id (untuk dropdown di form)
+export const getkaderByOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     const { opd_id } = req.query;
     try {
         let query: string;
         let params: any[];
 
         if (opd_id) {
-            query = `SELECT komunitas_id, nama_komunitas, opd_id FROM komunitas WHERE opd_id = $1 ORDER BY nama_komunitas`;
+            query = `SELECT kader_id, nama_kader, opd_id FROM kader WHERE opd_id = $1 ORDER BY nama_kader`;
             params = [opd_id];
         } else {
-            query = `SELECT komunitas_id, nama_komunitas, opd_id FROM komunitas ORDER BY nama_komunitas`;
+            query = `SELECT kader_id, nama_kader, opd_id FROM kader ORDER BY nama_kader`;
             params = [];
         }
 
         const result = await executeQueryWithContext(query, params, req.user);
         res.status(200).json({ success: true, data: result.rows });
     } catch (error: any) {
-        console.error('Error in getKomunitasByOpd:', error);
+        console.error('Error in getkaderByOpd:', error);
         res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
     }
 };

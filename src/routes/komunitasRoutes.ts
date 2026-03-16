@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 import {
-    getAllKomunitas,
-    getKomunitasById,
-    createKomunitas,
-    updateKomunitas,
-    deleteKomunitas
+    getAllKader,
+    getKaderById,
+    createKader,
+    updateKader,
+    deleteKader,
+    toggleKaderStatus
 } from '../controllers/komunitasController';
 
 const router = Router();
@@ -13,20 +14,23 @@ const router = Router();
 // Semua route dilindungi Super Admin
 router.use(verifyToken, authorizeRole('super_admin'));
 
-// URL: GET /api/komunitas          → semua komunitas
-// URL: GET /api/komunitas?opd_id=1 → komunitas berdasarkan OPD
-router.get('/', getAllKomunitas);
+// URL: GET /api/kader          → semua kader
+// URL: GET /api/kader?opd_id=1 → kader berdasarkan OPD
+router.get('/', getAllKader);
 
-// URL: GET /api/komunitas/:id
-router.get('/:id', getKomunitasById);
+// URL: GET /api/kader/:id
+router.get('/:id', getKaderById);
 
-// URL: POST /api/komunitas
-router.post('/', createKomunitas);
+// URL: POST /api/kader
+router.post('/', createKader);
 
-// URL: PUT /api/komunitas/:id
-router.put('/:id', updateKomunitas);
+// URL: PUT /api/kader/:id
+router.put('/:id', updateKader);
 
-// URL: DELETE /api/komunitas/:id
-router.delete('/:id', deleteKomunitas);
+// URL: DELETE /api/kader/:id
+router.delete('/:id', deleteKader);
+
+// URL: PATCH /api/kader/:id/status
+router.patch('/:id/status', toggleKaderStatus);
 
 export default router;
