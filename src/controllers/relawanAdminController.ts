@@ -9,9 +9,9 @@ export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<vo
         const query = `
             SELECT 
                 u.user_id, u.nik, u.nama_lengkap, u.email, u.no_hp, u.is_active,
-                r.relawan_id, r.jenis_kelamin, r.tempat_lahir, r.tanggal_lahir,
-                r.alamat_ktp, r.kelurahan, r.penugasan AS penugasan_teks,
-                pr.status_keaktifan AS status_penugasan,
+                r.relawan_id, r.jenis_kelamin,
+                r.alamat_ktp, r.kelurahan,
+                pr.penugasan, pr.status_keaktifan AS status_penugasan,
                 o.nama_opd, k.nama_komunitas
             FROM users u
             JOIN relawan r ON u.user_id = r.user_id
@@ -41,8 +41,8 @@ export const getRelawanById = async (req: AuthRequest, res: Response): Promise<v
         const query = `
             SELECT 
                 u.user_id, u.nik, u.nama_lengkap, u.email, u.no_hp, u.foto_profil, u.is_active,
-                r.relawan_id, r.jenis_kelamin, r.tempat_lahir, r.tanggal_lahir, r.alamat_ktp, r.alamat_domisili, r.kelurahan,
-                pr.penugasan_id, pr.jabatan, pr.status_keaktifan AS status_penugasan, pr.nomor_sk_manual,
+                r.relawan_id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
+                pr.penugasan_id, pr.penugasan, pr.jabatan, pr.status_keaktifan AS status_penugasan, pr.nomor_sk_manual,
                 o.nama_opd, k.nama_komunitas
             FROM users u
             JOIN relawan r ON u.user_id = r.user_id
