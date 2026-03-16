@@ -7,7 +7,7 @@ import {
     reviewPengajuan,
     createBulkRelawan,
     createRelawan,
-    getKomunitasByOpd
+    getkaderByOpd
 } from '../controllers/relawanAdminController';
 
 const router = Router();
@@ -25,7 +25,7 @@ router.post('/', createRelawan);
 router.post('/bulk', createBulkRelawan);
 
 // URL: GET http://localhost:3000/api/admin/relawan/komunitas?opd_id=1
-router.get('/komunitas', getKomunitasByOpd);
+router.get('/komunitas', getkaderByOpd);
 
 // URL: GET http://localhost:3000/api/admin/relawan/pengajuan
 // TARUH PENGAJUAN DI ATAS /:id AGAR TIDAK BENTROK DENGAN BACA PARAMETER ID
