@@ -1,0 +1,56 @@
+import { Response } from 'express';
+import { executeQueryWithContext } from '../../config/db';
+import { AuthRequest } from '../middleware/authMiddleware';
+import bcrypt from 'bcrypt';
+
+// Ganti Password — bisa dipakai semua role (super_admin, opd, relawan)
+export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
+    const { password_lama, password_baru } = req.body;
+    const userId = req.user?.id;
+
+    if (!password_lama || !password_baru) {
+        res.status(400).json({ success: false, message: 'Password lama dan password baru wajib diisi' });
+        return;
+    }
+
+    if (password_baru.length < 6) {
+        res.status(400).json({ success: false, message: 'Password baru minimal 6 karakter' });
+        return;
+    }
+
+    try {
+        // 1. Ambil password saat ini dari DB
+        const userRes = await executeQueryWithContext(
+            `SELECT password FROM users WHERE user_id = $1`,
+            [userId], req.user
+        );
+
+        if (userRes.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'User tidak ditemukan' });
+            return;
+        }
+
+        // 2. Verifikasi password lama
+        const isMatch = await bcrypt.compare(password_lama, userRes.rows[0].password);
+        if (!isMatch) {
+            res.status(400).json({ success: false, message: 'Password lama tidak sesuai' });
+            return;
+        }
+
+        // 3. Hash password baru
+        const salt = await bcrypt.genSalt(10);
+        const hashedBaru = await bcrypt.hash(password_baru, salt);
+
+        // 4. Simpan password baru
+        await executeQueryWithContext(
+            `UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2`,
+            [hashedBaru, userId], req.user
+        );
+
+        res.status(200).json({ success: true, message: 'Password berhasil diubah' });
+
+    } catch (error: any) {
+        console.error('Error in changePassword:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
+    }
+};
