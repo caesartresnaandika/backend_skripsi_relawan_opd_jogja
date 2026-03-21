@@ -2,7 +2,12 @@ import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 import { requireOpdContext } from '../middleware/opdMiddleware';
 import { getOpdDashboardStats } from '../controllers/opdDashboardController';
-import { getKaderByOpd, createKader, updateKader, deleteKader } from '../controllers/kaderController';
+import {
+    getKaderByOpd,
+    createKaderByOpd,
+    updateKaderByOpd,
+    deleteKaderByOpd
+} from '../controllers/kaderController';
 import { getRelawanByOpd, getSkByOpd } from '../controllers/opdRelawanController';
 
 const router = Router();
@@ -20,13 +25,13 @@ router.use(requireOpdContext);
 // 1. Dashboard Statistik
 router.get('/dashboard', getOpdDashboardStats);
 
-// 2. Manajemen Kader / Komunitas
+// 2. Manajemen Kader
 router.get('/kader', getKaderByOpd);
-router.post('/kader', createKader);
-router.patch('/kader/:id', updateKader);
-router.delete('/kader/:id', deleteKader);
+router.post('/kader', createKaderByOpd);
+router.patch('/kader/:id', updateKaderByOpd);
+router.delete('/kader/:id', deleteKaderByOpd);
 
-// 3. Data Relawan & Surat Keputusan (Sudah difilter otomatis by opd_id)
+// 3. Data Relawan & Surat Keputusan
 router.get('/relawan', getRelawanByOpd);
 router.get('/sk', getSkByOpd);
 
