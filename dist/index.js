@@ -18,7 +18,7 @@ const logRoutes_1 = __importDefault(require("./src/routes/logRoutes"));
 const opdAdminRoutes_1 = __importDefault(require("./src/routes/opdAdminRoutes"));
 const debugRoutes_1 = __importDefault(require("./src/routes/debugRoutes"));
 const saranRoutes_1 = __importDefault(require("./src/routes/saranRoutes"));
-const komunitasRoutes_1 = __importDefault(require("./src/routes/komunitasRoutes"));
+const kaderRoutes_1 = __importDefault(require("./src/routes/kaderRoutes"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
@@ -35,7 +35,7 @@ app.use('/api/admin/dashboard', dashboardRoutes_1.default); // http://localhost:
 app.use('/api/admin/logs', logRoutes_1.default); // http://localhost:3000/api/admin/logs
 app.use('/api/opd-admin', opdAdminRoutes_1.default); // http://localhost:3000/api/opd-admin
 app.use('/api/saran', saranRoutes_1.default); // http://localhost:3000/api/saran
-app.use('/api/komunitas', komunitasRoutes_1.default); // http://localhost:3000/api/komunitas
+app.use('/api/kader', kaderRoutes_1.default); // http://localhost:3000/api/kader
 app.use('/api/debug', debugRoutes_1.default); // http://localhost:3000/api/debug
 // Test Root
 app.get('/', (req, res) => {

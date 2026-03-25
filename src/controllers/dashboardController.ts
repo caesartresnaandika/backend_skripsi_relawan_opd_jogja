@@ -27,7 +27,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
                 SELECT COUNT(*) as total FROM opd WHERE is_active = true
             `, [], req.user),
 
-            // 3. Total Kader/Komunitas
+            // 3. Total Kader/kader
             executeQueryWithContext(`
                 SELECT COUNT(*) as total FROM kader
             `, [], req.user),
