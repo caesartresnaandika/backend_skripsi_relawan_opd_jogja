@@ -3,24 +3,26 @@ import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 
 /**
- * GET /api/admin/saran
+ * GET /api/saran/admin
  * Mengambil semua saran masukan. Hanya untuk Super Admin.
- * Mendukung query: ?page=1&limit=10&status_baca=true|false
+ * Mendukung query: ?page=1&limit=10&status=Menunggu|Selesai
  */
 export const getAllSaran = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 10;
         const offset = (page - 1) * limit;
-        const statusBaca = req.query.status_baca as string; // 'true' atau 'false'
+        const statusFilter = req.query.status as string; // 'Menunggu' atau 'Selesai'
 
         let baseQuery = `
             SELECT 
                 sm.saran_id,
                 sm.subjek,
                 sm.pesan,
-                sm.status_baca,
+                sm.status,
+                sm.catatan_admin,
                 sm.created_at,
+                sm.updated_at,
                 u.nama_lengkap,
                 u.no_hp,
                 u.role
@@ -31,13 +33,13 @@ export const getAllSaran = async (req: AuthRequest, res: Response): Promise<void
         const values: any[] = [];
         let paramIndex = 1;
 
-        if (statusBaca !== undefined && statusBaca !== '') {
-            baseQuery += ` AND sm.status_baca = $${paramIndex}`;
-            values.push(statusBaca === 'true');
+        if (statusFilter && ['Menunggu', 'Selesai'].includes(statusFilter)) {
+            baseQuery += ` AND sm.status = $${paramIndex}`;
+            values.push(statusFilter);
             paramIndex++;
         }
 
-        // Hitung total record untuk pagination
+        // Hitung total untuk pagination
         const countQuery = `SELECT COUNT(*) FROM (${baseQuery}) as total_count`;
         const countResult = await executeQueryWithContext(countQuery, values, req.user);
         const totalRecords = parseInt(countResult.rows[0].count, 10);
@@ -74,7 +76,7 @@ export const getAllSaran = async (req: AuthRequest, res: Response): Promise<void
 
 /**
  * POST /api/saran
- * Mengirim saran masukan. Bisa dilakukan oleh semua user yang sudah login (Relawan, OPD, dll).
+ * Mengirim saran masukan. Bisa dilakukan oleh semua user yang sudah login.
  * Body: { subjek?: string, pesan: string }
  */
 export const createSaran = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -93,13 +95,11 @@ export const createSaran = async (req: AuthRequest, res: Response): Promise<void
         }
 
         const query = `
-            INSERT INTO saran_masukan (user_id, subjek, pesan)
-            VALUES ($1, $2, $3)
-            RETURNING saran_id, subjek, pesan, status_baca, created_at
+            INSERT INTO saran_masukan (user_id, subjek, pesan, status)
+            VALUES ($1, $2, $3, 'Menunggu')
+            RETURNING saran_id, subjek, pesan, status, created_at
         `;
-        const values = [userId, subjek || null, pesan];
-
-        const result = await executeQueryWithContext(query, values, req.user);
+        const result = await executeQueryWithContext(query, [userId, subjek || null, pesan], req.user);
 
         res.status(201).json({
             success: true,
@@ -114,27 +114,33 @@ export const createSaran = async (req: AuthRequest, res: Response): Promise<void
 };
 
 /**
- * PATCH /api/admin/saran/:id/baca
- * Menandai saran sebagai sudah dibaca (atau toggle). Hanya untuk Super Admin.
- * Body: { status_baca: true | false }
+ * PATCH /api/saran/admin/:id/baca
+ * Update status saran + opsional tambah catatan admin. Hanya untuk Super Admin.
+ * Body: { status: 'Menunggu' | 'Selesai', catatan_admin?: string }
  */
 export const updateStatusBaca = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { status_baca } = req.body;
+        const { status, catatan_admin } = req.body;
 
-        if (status_baca === undefined) {
-            res.status(400).json({ success: false, message: 'Field "status_baca" wajib diisi (true/false)' });
+        if (!status || !['Menunggu', 'Selesai'].includes(status)) {
+            res.status(400).json({ success: false, message: 'Field "status" wajib diisi dengan nilai "Menunggu" atau "Selesai"' });
             return;
         }
 
         const query = `
             UPDATE saran_masukan
-            SET status_baca = $1
-            WHERE saran_id = $2
-            RETURNING saran_id, status_baca
+            SET status = $1,
+                catatan_admin = $2,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE saran_id = $3
+            RETURNING saran_id, status, catatan_admin, updated_at
         `;
-        const result = await executeQueryWithContext(query, [status_baca, id], req.user);
+        const result = await executeQueryWithContext(
+            query,
+            [status, catatan_admin || null, id],
+            req.user
+        );
 
         if (result.rowCount === 0) {
             res.status(404).json({ success: false, message: 'Saran tidak ditemukan' });
@@ -143,7 +149,7 @@ export const updateStatusBaca = async (req: AuthRequest, res: Response): Promise
 
         res.status(200).json({
             success: true,
-            message: `Saran berhasil ditandai sebagai ${status_baca ? 'sudah dibaca' : 'belum dibaca'}`,
+            message: `Saran berhasil ditandai sebagai "${status}"`,
             data: result.rows[0]
         });
 
