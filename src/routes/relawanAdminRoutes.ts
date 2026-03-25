@@ -25,7 +25,7 @@ router.post('/', createRelawan);
 router.post('/bulk', createBulkRelawan);
 
 // URL: GET http://localhost:3000/api/admin/relawan/komunitas?opd_id=1
-router.get('/komunitas', getkaderByOpd);
+router.get('/kader', getkaderByOpd);
 
 // URL: GET http://localhost:3000/api/admin/relawan/pengajuan
 // TARUH PENGAJUAN DI ATAS /:id AGAR TIDAK BENTROK DENGAN BACA PARAMETER ID
