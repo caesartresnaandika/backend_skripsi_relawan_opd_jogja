@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS public.kader
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     pic text COLLATE pg_catalog."default",
     is_active boolean DEFAULT true,
+    nik_pic character varying(16) COLLATE pg_catalog."default",
+    user_id integer,
     CONSTRAINT komunitas_pkey PRIMARY KEY (kader_id)
 );
 
@@ -49,6 +51,7 @@ CREATE TABLE IF NOT EXISTS public.opd
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     is_active boolean DEFAULT true,
+    nik_pic character varying(16) COLLATE pg_catalog."default",
     CONSTRAINT opd_pkey PRIMARY KEY (opd_id)
 );
 
@@ -131,6 +134,7 @@ CREATE TABLE IF NOT EXISTS public.saran_masukan
     status status_saran DEFAULT 'Menunggu'::status_saran,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    catatan_admin text COLLATE pg_catalog."default",
     CONSTRAINT saran_masukan_pkey PRIMARY KEY (saran_id)
 );
 
@@ -171,6 +175,13 @@ CREATE TABLE IF NOT EXISTS public.users
 
 ALTER TABLE IF EXISTS public.audit_logs
     ADD CONSTRAINT fk_audit_user FOREIGN KEY (user_id)
+    REFERENCES public.users (user_id) MATCH SIMPLE
+    ON UPDATE CASCADE
+    ON DELETE SET NULL;
+
+
+ALTER TABLE IF EXISTS public.kader
+    ADD CONSTRAINT fk_kader_user FOREIGN KEY (user_id)
     REFERENCES public.users (user_id) MATCH SIMPLE
     ON UPDATE CASCADE
     ON DELETE SET NULL;
