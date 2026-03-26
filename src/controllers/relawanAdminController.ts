@@ -1,4 +1,5 @@
 //relawanAdminController
+import pool from '../../config/db';
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
@@ -240,7 +241,7 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
     }
 };
 
-// 6. Tambah Relawan Bulk (dari Excel)
+// 6. Tambah Relawan Bulk (dari Excel & Form Manual)
 export const createBulkRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
     const rawData = req.body;
 
@@ -249,144 +250,169 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
         return;
     }
 
-    // ── Helper: normalisasi satu baris dari Excel atau form ──────
+    // ── Helper: Normalisasi menangkap format Excel & format Axios Frontend ──────
     const normalizeItem = (raw: any) => {
-        // Normalisasi semua key ke UPPERCASE agar case-insensitive
-        const r: Record<string, any> = {};
+        // 1. Buat versi "bersih" dari data Excel
+        // Menghapus SEMUA spasi, underscore, strip, dll, dan ubah ke huruf kecil
+        const cleanExcelData: Record<string, any> = {};
         for (const key of Object.keys(raw)) {
-            r[key.trim().toUpperCase()] = raw[key];
+            const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, ''); 
+            cleanExcelData[cleanKey] = raw[key];
         }
 
+        // 2. Helper untuk mencari data. Prioritas: 
+        // - Cek key bawaan frontend (karena form manual mengirim key rapi seperti 'jenis_kelamin')
+        // - Cek dari kumpulan kemungkinan nama kolom Excel yang sudah dibersihkan
+        const getVal = (frontendKey: string, possibleExcelKeys: string[]) => {
+            if (raw[frontendKey] !== undefined) return String(raw[frontendKey]);
+            for (const key of possibleExcelKeys) {
+                if (cleanExcelData[key] !== undefined) return String(cleanExcelData[key]);
+            }
+            return '';
+        };
+
         return {
-            nik:          String(r['NIK'] || '').trim(),
-            namaLengkap:  (r['NAMA LENGKAP'] || r['NAMALENGKAP'] || '').trim(),
-            jenisKelamin: (r['JENIS KELAMIN'] || r['JENISKELAMIN'] || 'L').trim().toUpperCase() === 'P' ? 'P' : 'L',
-            alamat:       (r['ALAMAT'] || r['ALAMAT KTP'] || '').trim() || '-',
-            kelurahan:    (r['KELURAHAN'] || '').trim() || '-',
-            opd:          (r['OPD'] || r['PENUGASAN'] || '').trim(),
-            kader:        (r['KOMUNITAS/KADER'] || r['KADER'] || '').trim(),
-            jabatan:      (r['JABATAN'] || r['PERAN'] || '').trim() || null,
-            detailJabatan:(r['DETAIL JABATAN'] || r['DETAILJABATAN'] || '').trim() || null,
-            penugasan:    (r['PENUGASAN'] || '').trim() || null,
+            nik:          getVal('nik', ['nik']).trim(),
+            namaLengkap:  getVal('nama_lengkap', ['namalengkap', 'nama']).trim(),
+            jenisKelamin: getVal('jenis_kelamin', ['jeniskelamin', 'jk', 'kelamin']).trim().toUpperCase() === 'P' ? 'P' : 'L',
+            alamat:       getVal('alamat_ktp', ['alamatktp', 'alamat', 'domisili']).trim() || '-',
+            kelurahan:    getVal('kelurahan', ['kelurahan', 'desa']).trim() || '-',
+            opd:          getVal('opd', ['opd', 'instansi']).trim(),
+            kader:        getVal('kader', ['kader', 'komunitaskader', 'komunitas']).trim(),
+            jabatan:      getVal('jabatan', ['jabatan', 'peran']).trim() || null,
+            detailJabatan:getVal('detail_jabatan', ['detailjabatan', 'detail']).trim() || null,
+            penugasan:    getVal('penugasan', ['penugasan', 'tugas']).trim() || null,
             assignments:  raw.assignments || null,
         };
     };
 
+    const client = await pool.connect(); // Menggunakan client khusus untuk transaksi
     let insertedCount = 0;
     const skippedNIK: string[] = [];
     const errors: string[] = [];
 
     try {
-        for (const rawItem of rawData) {
+        for (let i = 0; i < rawData.length; i++) {
+            const rawItem = rawData[i];
             const item = normalizeItem(rawItem);
+            const rowNumber = i + 1; // Membantu identifikasi baris di Excel
 
             if (!item.nik || !item.namaLengkap) {
-                errors.push(`Baris dilewati: NIK atau Nama Lengkap kosong`);
+                errors.push(`Baris ${rowNumber} dilewati: NIK atau Nama Lengkap kosong.`);
                 continue;
             }
 
-            // ── Cek NIK sudah ada ──
-            const checkRes = await executeQueryWithContext(
-                `SELECT user_id FROM users WHERE nik = $1`, [item.nik], req.user
-            );
-            if (checkRes.rows.length > 0) {
-                skippedNIK.push(item.nik);
-                continue;
-            }
+            try {
+                // ── TRANSAKSI DIMULAI PER BARIS ──
+                await client.query('BEGIN');
 
-            // ── 1. Insert users ──
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(item.nik, salt);
-            const userRes = await executeQueryWithContext(
-                `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
-                 VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id`,
-                [item.nik, item.namaLengkap, hashedPassword], req.user
-            );
-            const userId = userRes.rows[0].user_id;
-
-            // ── 2. Insert relawan ──
-            const relawanRes = await executeQueryWithContext(
-                `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-                 VALUES ($1, $2, $3, $4) RETURNING relawan_id`,
-                [userId, item.jenisKelamin, item.alamat, item.kelurahan], req.user
-            );
-            const relawanId = relawanRes.rows[0].relawan_id;
-
-            // ── 3. Siapkan daftar penugasan ──
-            // Jika dari form (multi-assignment) → pakai item.assignments
-            // Jika dari Excel (single row)       → buat satu assignment dari kolom OPD/Kader
-            const assignmentsToProcess: any[] = item.assignments && item.assignments.length > 0
-                ? item.assignments
-                : [{
-                    opd:              item.opd,
-                    opd_id:           rawItem.opd_id || null,
-                    kader:            item.kader,
-                    peran:            item.jabatan,
-                    detail:           item.detailJabatan,
-                    penugasan:        item.penugasan,
-                    statusKeaktifan:  'Aktif',
-                }];
-
-            // ── 4. Insert setiap penugasan ──
-            for (const assign of assignmentsToProcess) {
-                // Resolve opd_id
-                let opdId: number | null = assign.opd_id || null;
-                const namaOpd: string = (assign.opd || '').trim();
-
-                if (!opdId && namaOpd && namaOpd !== '-') {
-                    const opdLookup = await executeQueryWithContext(
-                        `SELECT opd_id FROM opd WHERE LOWER(TRIM(nama_opd)) = LOWER(TRIM($1)) LIMIT 1`,
-                        [namaOpd], req.user
-                    );
-                    if (opdLookup.rows.length > 0) opdId = opdLookup.rows[0].opd_id;
+                // Cek duplikasi NIK
+                const checkRes = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [item.nik]);
+                if (checkRes.rows.length > 0) {
+                    skippedNIK.push(item.nik);
+                    await client.query('ROLLBACK'); // Batalkan baris ini
+                    continue;
                 }
 
-                if (!opdId) continue; // Tidak ada OPD → skip penugasan ini
-
-                // Resolve kader_id
-                let kaderId: number | null = assign.kader_id || null;
-                const namaKader: string = (assign.kader || '').trim();
-
-                if (!kaderId && namaKader && namaKader !== '-') {
-                    const kaderLookup = await executeQueryWithContext(
-                        `SELECT kader_id FROM kader
-                         WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) AND opd_id = $2 LIMIT 1`,
-                        [namaKader, opdId], req.user
-                    );
-                    if (kaderLookup.rows.length > 0) kaderId = kaderLookup.rows[0].kader_id;
-                }
-
-                // ── INSERT penugasan_relawan ──
-                // Kolom yang benar sesuai schema: jabatan, penugasan, detail_jabatan ✅
-                await executeQueryWithContext(
-                    `INSERT INTO penugasan_relawan
-                        (relawan_id, opd_id, kader_id, jabatan, penugasan, detail_jabatan, status_keaktifan)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7)
-                     ON CONFLICT (relawan_id, opd_id) DO UPDATE
-                         SET kader_id      = EXCLUDED.kader_id,
-                             jabatan       = EXCLUDED.jabatan,
-                             penugasan     = EXCLUDED.penugasan,
-                             detail_jabatan = EXCLUDED.detail_jabatan,
-                             status_keaktifan = EXCLUDED.status_keaktifan,
-                             updated_at    = CURRENT_TIMESTAMP`,
-                    [
-                        relawanId,
-                        opdId,
-                        kaderId,
-                        assign.peran   || null,
-                        assign.penugasan || namaOpd || null,
-                        assign.detail  || null,
-                        assign.statusKeaktifan || 'Aktif',
-                    ], req.user
+                // 1. Insert users
+                const salt = await bcrypt.genSalt(10);
+                const hashedPassword = await bcrypt.hash(item.nik, salt);
+                const userRes = await client.query(
+                    `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
+                     VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id`,
+                    [item.nik, item.namaLengkap, hashedPassword]
                 );
-            }
+                const userId = userRes.rows[0].user_id;
 
-            insertedCount++;
+                // 2. Insert relawan
+                const relawanRes = await client.query(
+                    `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                     VALUES ($1, $2, $3, $4) RETURNING relawan_id`,
+                    [userId, item.jenisKelamin, item.alamat, item.kelurahan]
+                );
+                const relawanId = relawanRes.rows[0].relawan_id;
+
+                // 3. Setup Penugasan
+                const assignmentsToProcess: any[] = item.assignments && item.assignments.length > 0
+                    ? item.assignments
+                    : [{
+                        opd: item.opd,
+                        kader: item.kader,
+                        peran: item.jabatan,
+                        detail: item.detailJabatan,
+                        penugasan: item.penugasan,
+                        statusKeaktifan: 'Aktif',
+                    }];
+
+                for (const assign of assignmentsToProcess) {
+                    let opdId: number | null = assign.opd_id || null;
+                    const namaOpd: string = (assign.opd || '').trim();
+
+                    // Cari OPD ID jika belum ada
+                    if (!opdId && namaOpd && namaOpd !== '-') {
+                        const opdLookup = await client.query(
+                            `SELECT opd_id FROM opd WHERE LOWER(TRIM(nama_opd)) = LOWER(TRIM($1)) LIMIT 1`,
+                            [namaOpd]
+                        );
+                        if (opdLookup.rows.length > 0) opdId = opdLookup.rows[0].opd_id;
+                    }
+
+                    if (!opdId) {
+                        // Jika OPD tidak ditemukan, catat warning, tapi jangan gagalkan insert relawannya
+                        errors.push(`Baris ${rowNumber} (NIK ${item.nik}): OPD "${namaOpd}" tidak ditemukan. Data relawan tersimpan, tapi tanpa penugasan.`);
+                        continue; 
+                    }
+
+                    // Cari Kader ID
+                    let kaderId: number | null = assign.kader_id || null;
+                    const namaKader: string = (assign.kader || '').trim();
+
+                    if (!kaderId && namaKader && namaKader !== '-') {
+                        const kaderLookup = await client.query(
+                            `SELECT kader_id FROM kader WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) AND opd_id = $2 LIMIT 1`,
+                            [namaKader, opdId]
+                        );
+                        if (kaderLookup.rows.length > 0) kaderId = kaderLookup.rows[0].kader_id;
+                    }
+
+                    // Insert Penugasan
+                    await client.query(
+                        `INSERT INTO penugasan_relawan
+                            (relawan_id, opd_id, kader_id, jabatan, penugasan, detail_jabatan, status_keaktifan)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7)
+                         ON CONFLICT (relawan_id, opd_id) DO UPDATE
+                             SET kader_id = EXCLUDED.kader_id,
+                                 jabatan = EXCLUDED.jabatan,
+                                 penugasan = EXCLUDED.penugasan,
+                                 detail_jabatan = EXCLUDED.detail_jabatan,
+                                 status_keaktifan = EXCLUDED.status_keaktifan,
+                                 updated_at = CURRENT_TIMESTAMP`,
+                        [
+                            relawanId,
+                            opdId,
+                            kaderId,
+                            assign.peran || null,
+                            assign.penugasan || namaOpd || null,
+                            assign.detail || null,
+                            assign.statusKeaktifan || 'Aktif',
+                        ]
+                    );
+                }
+
+                await client.query('COMMIT'); // Simpan baris ini secara permanen
+                insertedCount++;
+
+            } catch (rowError: any) {
+                await client.query('ROLLBACK'); // Batalkan HANYA baris ini jika gagal
+                console.error(`Error processing row ${rowNumber}:`, rowError);
+                errors.push(`Baris ${rowNumber} gagal diproses: ${rowError.message}`);
+            }
         }
 
-        const parts: string[] = [`Berhasil menambahkan ${insertedCount} relawan baru.`];
+        // Response final merangkum hasil seluruh looping
+        const parts: string[] = [`Berhasil menambahkan ${insertedCount} relawan.`];
         if (skippedNIK.length > 0) parts.push(`${skippedNIK.length} NIK dilewati (sudah terdaftar).`);
-        if (errors.length > 0) parts.push(`${errors.length} baris gagal.`);
+        if (errors.length > 0) parts.push(`Ada ${errors.length} peringatan/error (cek detail).`);
 
         res.status(201).json({
             success: true,
@@ -394,13 +420,15 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
             data: { insertedCount, skippedNIK, errors }
         });
 
-    } catch (error: any) {
-        console.error('Error in createBulkRelawan:', error);
+    } catch (fatalError: any) {
+        console.error('Fatal error in createBulkRelawan:', fatalError);
         res.status(500).json({
             success: false,
-            message: 'Terjadi kesalahan pada server saat menyimpan data relawan',
-            errorDetail: error.message
+            message: 'Terjadi kesalahan sistem yang fatal.',
+            errorDetail: fatalError.message
         });
+    } finally {
+        client.release(); // Sangat penting: kembalikan koneksi ke pool
     }
 };
 
