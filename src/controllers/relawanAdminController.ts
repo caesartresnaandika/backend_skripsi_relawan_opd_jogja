@@ -44,7 +44,9 @@ export const getRelawanById = async (req: AuthRequest, res: Response): Promise<v
             SELECT 
                 u.user_id, u.nik, u.nama_lengkap, u.email, u.no_hp, u.foto_profil, u.is_active,
                 r.relawan_id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
-                pr.penugasan_id, pr.penugasan, pr.jabatan, pr.status_keaktifan AS status_penugasan, pr.nomor_sk_manual,
+                pr.penugasan_id, pr.penugasan, pr.jabatan, pr.detail_jabatan,
+                pr.status_keaktifan AS status_penugasan, pr.nomor_sk_manual,
+                pr.opd_id, pr.kader_id,
                 o.nama_opd, k.nama_kader
             FROM users u
             JOIN relawan r ON u.user_id = r.user_id

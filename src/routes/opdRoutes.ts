@@ -1,3 +1,4 @@
+//opdRoutes.ts
 import { Router } from 'express';
 import { getAllOpd, getOpdById, createOpd, createBulkOpd, updateOpd, toggleOpdStatus } from '../controllers/opdController';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
