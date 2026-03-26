@@ -105,13 +105,17 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
     const errors: string[] = [];
 
     try {
-        for (const item of data) {
-            // ── Normalisasi nama kolom template Excel ──
-            const namaOpd  = (item.namaOpd || item.nama_opd || '').trim();
-            const nikPic   = String(item['NIK PIC'] || item['nik_pic'] || item['nik pic'] || '').trim();
-            const pic      = (item.PIC || item.pic || '').trim() || null;
-            const alamat   = (item.alamat || '').trim() || null;
-            const kontak   = (item.kontak || '').trim() || null;
+        for (const rawItem of data) {
+            const item: Record<string, any> = {};
+            for (const key of Object.keys(rawItem)) {
+                item[key.trim().toUpperCase()] = rawItem[key];
+            }
+
+            const namaOpd = (item['NAMAOPD'] || item['NAMA OPD'] || '').trim();
+            const nikPic  = String(item['NIK PIC'] || item['NIKPIC'] || '').trim();
+            const pic     = (item['PIC'] || '').trim() || null;
+            const alamat  = (item['ALAMAT'] || '').trim() || null;
+            const kontak  = (item['KONTAK'] || '').trim() || null;
 
             // ── Validasi per baris ──
             if (!namaOpd) {

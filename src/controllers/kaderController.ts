@@ -222,13 +222,18 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
     const errors: string[] = [];
  
     try {
-        for (const item of data) {
-            // ── Normalisasi nama kolom template Excel ──
-            const namaKader = (item.namaKader || item.nama_kader || '').trim();
-            const namaOpd   = (item.OPD || item.opd || item.nama_opd || '').trim();
-            const nikPic    = String(item['nik pic'] || item['NIK PIC'] || item.nik_pic || '').trim();
-            const pic       = (item.pic || item.PIC || '').trim() || null;
- 
+        for (const rawItem of data) {
+            // Normalisasi key
+            const item: Record<string, any> = {};
+            for (const key of Object.keys(rawItem)) {
+                item[key.trim().toUpperCase()] = rawItem[key];
+            }
+
+            const namaKader = (item['NAMAKADER'] || item['NAMA KADER'] || '').trim();
+            const namaOpd   = (item['OPD'] || item['NAMA OPD'] || '').trim();
+            const nikPic    = String(item['NIK PIC'] || item['NIKPIC'] || item['NIK'] || '').trim();
+            const pic       = (item['PIC'] || '').trim() || null;
+        
             // ── Validasi per baris ──
             if (!namaKader) {
                 errors.push('Satu baris dilewati: kolom namaKader kosong');

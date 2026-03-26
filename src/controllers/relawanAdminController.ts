@@ -250,21 +250,27 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
     }
 
     // ── Helper: normalisasi satu baris dari Excel atau form ──────
-    const normalizeItem = (raw: any) => ({
-        nik:          String(raw.NIK          || raw.nik          || '').trim(),
-        namaLengkap:  (raw['NAMA LENGKAP']    || raw.namaLengkap  || raw.nama_lengkap || '').trim(),
-        jenisKelamin: (raw['JENIS KELAMIN']   || raw['jenis kelamin'] || raw.jenis_kelamin || raw.jenisKelamin || 'L').trim().toUpperCase() === 'P' ? 'P' : 'L',
-        alamat:       (raw.ALAMAT             || raw.alamat       || raw.alamat_ktp   || '').trim() || '-',
-        kelurahan:    (raw.KELURAHAN          || raw.kelurahan    || '').trim() || '-',
-        // Kolom penugasan untuk assignment tunggal (dari template Excel)
-        opd:          (raw.OPD               || raw.opd          || raw.penugasan     || '').trim(),
-        kader:        (raw['KOMUNITAS/KADER'] || raw.kader        || '').trim(),
-        jabatan:      (raw.JABATAN            || raw.jabatan      || raw.peran         || '').trim() || null,
-        detailJabatan:(raw['DETAIL JABATAN']  || raw.detail       || raw.detail_jabatan || raw.detailJabatan || '').trim() || null,
-        penugasan:    (raw.PENUGASAN          || raw.penugasan    || '').trim() || null,
-        // Array assignments (dari form multi-penugasan)
-        assignments:  raw.assignments || null,
-    });
+    const normalizeItem = (raw: any) => {
+        // Normalisasi semua key ke UPPERCASE agar case-insensitive
+        const r: Record<string, any> = {};
+        for (const key of Object.keys(raw)) {
+            r[key.trim().toUpperCase()] = raw[key];
+        }
+
+        return {
+            nik:          String(r['NIK'] || '').trim(),
+            namaLengkap:  (r['NAMA LENGKAP'] || r['NAMALENGKAP'] || '').trim(),
+            jenisKelamin: (r['JENIS KELAMIN'] || r['JENISKELAMIN'] || 'L').trim().toUpperCase() === 'P' ? 'P' : 'L',
+            alamat:       (r['ALAMAT'] || r['ALAMAT KTP'] || '').trim() || '-',
+            kelurahan:    (r['KELURAHAN'] || '').trim() || '-',
+            opd:          (r['OPD'] || r['PENUGASAN'] || '').trim(),
+            kader:        (r['KOMUNITAS/KADER'] || r['KADER'] || '').trim(),
+            jabatan:      (r['JABATAN'] || r['PERAN'] || '').trim() || null,
+            detailJabatan:(r['DETAIL JABATAN'] || r['DETAILJABATAN'] || '').trim() || null,
+            penugasan:    (r['PENUGASAN'] || '').trim() || null,
+            assignments:  raw.assignments || null,
+        };
+    };
 
     let insertedCount = 0;
     const skippedNIK: string[] = [];
