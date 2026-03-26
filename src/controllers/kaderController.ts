@@ -1,4 +1,5 @@
 //kaderController
+import pool from '../../config/db';
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
@@ -211,98 +212,128 @@ export const toggleKaderStatus = async (req: AuthRequest, res: Response): Promis
 
 export const createBulkKader = async (req: AuthRequest, res: Response): Promise<void> => {
     const data = req.body;
- 
+
     if (!Array.isArray(data) || data.length === 0) {
         res.status(400).json({ success: false, message: 'Data harus berupa array yang tidak kosong' });
         return;
     }
- 
+
     const inserted: string[] = [];
     const skipped: string[] = [];
     const errors: string[] = [];
- 
+
+    // Ambil client khusus untuk eksekusi transaksi
+    const client = await pool.connect(); 
+
     try {
-        for (const rawItem of data) {
-            // Normalisasi key
+        for (let i = 0; i < data.length; i++) {
+            const rawItem = data[i];
+            const rowNumber = i + 1;
+
+            // ── 1. Fuzzy Key Normalization (Kebal spasi & Case Insensitive) ──
             const item: Record<string, any> = {};
             for (const key of Object.keys(rawItem)) {
-                item[key.trim().toUpperCase()] = rawItem[key];
+                const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+                item[cleanKey] = rawItem[key];
             }
 
-            const namaKader = (item['NAMAKADER'] || item['NAMA KADER'] || '').trim();
-            const namaOpd   = (item['OPD'] || item['NAMA OPD'] || '').trim();
-            const nikPic    = String(item['NIK PIC'] || item['NIKPIC'] || item['NIK'] || '').trim();
-            const pic       = (item['PIC'] || '').trim() || null;
-        
-            // ── Validasi per baris ──
+            const getVal = (possibleKeys: string[]) => {
+                for (const key of possibleKeys) {
+                    if (item[key] !== undefined) return String(item[key]);
+                }
+                return '';
+            };
+
+            const namaKader = getVal(['namakader', 'kader', 'nama']).trim();
+            const namaOpd   = getVal(['opd', 'namaopd', 'instansi']).trim();
+            const nikPic    = getVal(['nikpic', 'nik', 'picnik']).trim();
+            const pic       = getVal(['pic', 'namapic', 'penanggungjawab']).trim() || null;
+            const deskripsi = getVal(['deskripsi', 'keterangan']).trim() || null;
+
+            // ── 2. Validasi Dasar ──
             if (!namaKader) {
-                errors.push('Satu baris dilewati: kolom namaKader kosong');
+                errors.push(`Baris ${rowNumber}: Nama Kader kosong`);
                 continue;
             }
             if (!namaOpd) {
-                errors.push(`"${namaKader}": kolom OPD kosong`);
+                errors.push(`Baris ${rowNumber} ("${namaKader}"): OPD kosong`);
                 continue;
             }
             if (!nikPic || nikPic.length !== 16) {
-                errors.push(`"${namaKader}": NIK PIC harus 16 digit (diterima: "${nikPic}")`);
+                errors.push(`Baris ${rowNumber} ("${namaKader}"): NIK PIC harus 16 digit (terdeteksi: "${nikPic}")`);
                 continue;
             }
- 
-            // ── Validasi OPD harus sudah ada di DB (cek hierarki) ──
-            const opdCheck = await executeQueryWithContext(
-                `SELECT opd_id FROM opd WHERE LOWER(TRIM(nama_opd)) = LOWER(TRIM($1)) AND is_active = true LIMIT 1`,
-                [namaOpd], req.user
-            );
-            if (opdCheck.rows.length === 0) {
-                errors.push(`"${namaKader}": OPD "${namaOpd}" tidak ditemukan atau tidak aktif. Upload data OPD terlebih dahulu.`);
-                continue;
+
+            // ── 3. TRANSAKSI DATABASE PER BARIS DIMULAI ──
+            try {
+                await client.query('BEGIN');
+
+                // Validasi OPD
+                const opdCheck = await client.query(
+                    `SELECT opd_id FROM opd WHERE LOWER(TRIM(nama_opd)) = LOWER(TRIM($1)) AND is_active = true LIMIT 1`,
+                    [namaOpd]
+                );
+                
+                if (opdCheck.rows.length === 0) {
+                    errors.push(`Baris ${rowNumber} ("${namaKader}"): OPD "${namaOpd}" tidak ditemukan/tidak aktif.`);
+                    await client.query('ROLLBACK');
+                    continue;
+                }
+                const opdId = opdCheck.rows[0].opd_id;
+
+                // Cek NIK
+                const checkNik = await client.query(
+                    `SELECT user_id FROM users WHERE nik = $1`, [nikPic]
+                );
+                if (checkNik.rows.length > 0) {
+                    skipped.push(`"${namaKader}" (NIK PIC ${nikPic} sudah terdaftar)`);
+                    await client.query('ROLLBACK');
+                    continue;
+                }
+
+                // Insert users
+                const salt = await bcrypt.genSalt(10);
+                const hashedPassword = await bcrypt.hash(nikPic, salt);
+                const userRes = await client.query(
+                    `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
+                     VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id`,
+                    [nikPic, pic || namaKader, hashedPassword]
+                );
+                const userId = userRes.rows[0].user_id;
+
+                // Insert kader
+                await client.query(
+                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id, is_active)
+                     VALUES ($1, $2, $3, $4, $5, $6, true)`,
+                    [opdId, namaKader, deskripsi, pic, nikPic, userId]
+                );
+
+                await client.query('COMMIT'); // Simpan permanen jika sukses semua
+                inserted.push(namaKader);
+
+            } catch (rowError: any) {
+                await client.query('ROLLBACK'); // Batalkan khusus baris ini jika ada tabel yang gagal
+                console.error(`Error processing row ${rowNumber}:`, rowError);
+                errors.push(`Baris ${rowNumber} ("${namaKader}") gagal: ${rowError.message}`);
             }
-            const opdId = opdCheck.rows[0].opd_id;
- 
-            // ── Cek NIK sudah ada ──
-            const checkNik = await executeQueryWithContext(
-                `SELECT user_id FROM users WHERE nik = $1`, [nikPic], req.user
-            );
-            if (checkNik.rows.length > 0) {
-                skipped.push(`"${namaKader}" (NIK ${nikPic} sudah terdaftar)`);
-                continue;
-            }
- 
-            // ── Buat akun user dengan role 'relawan' (sesuai pola createKader single) ──
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(nikPic, salt);
-            const userRes = await executeQueryWithContext(
-                `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
-                 VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id`,
-                [nikPic, pic || namaKader, hashedPassword], req.user
-            );
-            const userId = userRes.rows[0].user_id;
- 
-            // ── Insert kader ──
-            await executeQueryWithContext(
-                `INSERT INTO kader (opd_id, nama_kader, pic, nik_pic, user_id, is_active)
-                 VALUES ($1, $2, $3, $4, $5, true)`,
-                [opdId, namaKader, pic, nikPic, userId], req.user
-            );
- 
-            inserted.push(namaKader);
         }
- 
+
         const totalOk = inserted.length;
         const parts: string[] = [`Berhasil menambahkan ${totalOk} kader baru.`];
         if (skipped.length > 0) parts.push(`${skipped.length} baris dilewati (NIK sudah ada).`);
-        if (errors.length > 0) parts.push(`${errors.length} baris gagal.`);
- 
-        // Jika semua gagal karena OPD tidak ditemukan → kembalikan detail error ke frontend
+        if (errors.length > 0) parts.push(`${errors.length} baris bermasalah (cek detail).`);
+
         res.status(totalOk > 0 ? 201 : 400).json({
             success: totalOk > 0,
             message: parts.join(' '),
             data: { insertedCount: totalOk, skipped, errors }
         });
- 
-    } catch (error: any) {
-        console.error('Error in createBulkKader:', error);
-        res.status(500).json({ success: false, message: 'Terjadi kesalahan server saat import Excel', errorDetail: error.message });
+
+    } catch (fatalError: any) {
+        console.error('Error in createBulkKader:', fatalError);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server saat import Excel', errorDetail: fatalError.message });
+    } finally {
+        client.release(); // WAJIB kembalikan koneksi ke pool
     }
 };
 
