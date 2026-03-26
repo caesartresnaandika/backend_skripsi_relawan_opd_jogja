@@ -1,3 +1,4 @@
+//dashboardRoutes.ts
 import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 import { getDashboardStats } from '../controllers/dashboardController';

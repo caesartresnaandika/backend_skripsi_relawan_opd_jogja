@@ -1,3 +1,4 @@
+//kaderController
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
@@ -208,6 +209,97 @@ export const toggleKaderStatus = async (req: AuthRequest, res: Response): Promis
     }
 };
 
+export const createBulkKader = async (req: AuthRequest, res: Response): Promise<void> => {
+    const data = req.body;
+ 
+    if (!Array.isArray(data) || data.length === 0) {
+        res.status(400).json({ success: false, message: 'Data harus berupa array yang tidak kosong' });
+        return;
+    }
+ 
+    const inserted: string[] = [];
+    const skipped: string[] = [];
+    const errors: string[] = [];
+ 
+    try {
+        for (const item of data) {
+            // ── Normalisasi nama kolom template Excel ──
+            const namaKader = (item.namaKader || item.nama_kader || '').trim();
+            const namaOpd   = (item.OPD || item.opd || item.nama_opd || '').trim();
+            const nikPic    = String(item['nik pic'] || item['NIK PIC'] || item.nik_pic || '').trim();
+            const pic       = (item.pic || item.PIC || '').trim() || null;
+ 
+            // ── Validasi per baris ──
+            if (!namaKader) {
+                errors.push('Satu baris dilewati: kolom namaKader kosong');
+                continue;
+            }
+            if (!namaOpd) {
+                errors.push(`"${namaKader}": kolom OPD kosong`);
+                continue;
+            }
+            if (!nikPic || nikPic.length !== 16) {
+                errors.push(`"${namaKader}": NIK PIC harus 16 digit (diterima: "${nikPic}")`);
+                continue;
+            }
+ 
+            // ── Validasi OPD harus sudah ada di DB (cek hierarki) ──
+            const opdCheck = await executeQueryWithContext(
+                `SELECT opd_id FROM opd WHERE LOWER(TRIM(nama_opd)) = LOWER(TRIM($1)) AND is_active = true LIMIT 1`,
+                [namaOpd], req.user
+            );
+            if (opdCheck.rows.length === 0) {
+                errors.push(`"${namaKader}": OPD "${namaOpd}" tidak ditemukan atau tidak aktif. Upload data OPD terlebih dahulu.`);
+                continue;
+            }
+            const opdId = opdCheck.rows[0].opd_id;
+ 
+            // ── Cek NIK sudah ada ──
+            const checkNik = await executeQueryWithContext(
+                `SELECT user_id FROM users WHERE nik = $1`, [nikPic], req.user
+            );
+            if (checkNik.rows.length > 0) {
+                skipped.push(`"${namaKader}" (NIK ${nikPic} sudah terdaftar)`);
+                continue;
+            }
+ 
+            // ── Buat akun user dengan role 'relawan' (sesuai pola createKader single) ──
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(nikPic, salt);
+            const userRes = await executeQueryWithContext(
+                `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
+                 VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id`,
+                [nikPic, pic || namaKader, hashedPassword], req.user
+            );
+            const userId = userRes.rows[0].user_id;
+ 
+            // ── Insert kader ──
+            await executeQueryWithContext(
+                `INSERT INTO kader (opd_id, nama_kader, pic, nik_pic, user_id, is_active)
+                 VALUES ($1, $2, $3, $4, $5, true)`,
+                [opdId, namaKader, pic, nikPic, userId], req.user
+            );
+ 
+            inserted.push(namaKader);
+        }
+ 
+        const totalOk = inserted.length;
+        const parts: string[] = [`Berhasil menambahkan ${totalOk} kader baru.`];
+        if (skipped.length > 0) parts.push(`${skipped.length} baris dilewati (NIK sudah ada).`);
+        if (errors.length > 0) parts.push(`${errors.length} baris gagal.`);
+ 
+        // Jika semua gagal karena OPD tidak ditemukan → kembalikan detail error ke frontend
+        res.status(totalOk > 0 ? 201 : 400).json({
+            success: totalOk > 0,
+            message: parts.join(' '),
+            data: { insertedCount: totalOk, skipped, errors }
+        });
+ 
+    } catch (error: any) {
+        console.error('Error in createBulkKader:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server saat import Excel', errorDetail: error.message });
+    }
+};
 
 // ============================================================
 // OPD ADMIN — dipakai via /api/opd-admin/kader (opdAdminRoutes.ts)

@@ -1,3 +1,4 @@
+//opdController
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
@@ -93,26 +94,85 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
 
 export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     const data = req.body;
+
     if (!Array.isArray(data) || data.length === 0) {
-        res.status(400).json({ success: false, message: 'Data yang dikirim harus berupa array yang tidak kosong' });
+        res.status(400).json({ success: false, message: 'Data harus berupa array yang tidak kosong' });
         return;
     }
+
+    const inserted: string[] = [];
+    const skipped: string[] = [];
+    const errors: string[] = [];
+
     try {
-        const values: any[] = [];
-        const placeholders: string[] = [];
-        let index = 1;
-        data.forEach(item => {
-            placeholders.push(`($${index++}, $${index++}, $${index++}, $${index++}, $${index++})`);
-            values.push(item.namaOpd || item.nama_opd, item.alamat || null, item.kontak || null, item.pic || null, item.status === 'Aktif' || item.is_active === true);
+        for (const item of data) {
+            // ── Normalisasi nama kolom template Excel ──
+            const namaOpd  = (item.namaOpd || item.nama_opd || '').trim();
+            const nikPic   = String(item['NIK PIC'] || item['nik_pic'] || item['nik pic'] || '').trim();
+            const pic      = (item.PIC || item.pic || '').trim() || null;
+            const alamat   = (item.alamat || '').trim() || null;
+            const kontak   = (item.kontak || '').trim() || null;
+
+            // ── Validasi per baris ──
+            if (!namaOpd) {
+                errors.push('Satu baris dilewati: kolom namaOpd kosong');
+                continue;
+            }
+            if (!nikPic || nikPic.length !== 16) {
+                errors.push(`"${namaOpd}": NIK PIC harus 16 digit (diterima: "${nikPic}")`);
+                continue;
+            }
+
+            // ── Cek NIK sudah ada ──
+            const checkNik = await executeQueryWithContext(
+                `SELECT user_id FROM users WHERE nik = $1`, [nikPic], req.user
+            );
+            if (checkNik.rows.length > 0) {
+                skipped.push(`"${namaOpd}" (NIK ${nikPic} sudah terdaftar)`);
+                continue;
+            }
+
+            // ── Buat akun user dengan role 'opd' ──
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(nikPic, salt);
+            const userRes = await executeQueryWithContext(
+                `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
+                 VALUES ($1, $2, $3, 'opd', true) RETURNING user_id`,
+                [nikPic, pic || namaOpd, hashedPassword], req.user
+            );
+            const userId = userRes.rows[0].user_id;
+
+            // ── Insert OPD ──
+            const opdRes = await executeQueryWithContext(
+                `INSERT INTO opd (nama_opd, alamat, kontak, pic, nik_pic, is_active)
+                 VALUES ($1, $2, $3, $4, $5, true) RETURNING opd_id`,
+                [namaOpd, alamat, kontak, pic, nikPic], req.user
+            );
+            const opdId = opdRes.rows[0].opd_id;
+
+            // ── Ikat user ke OPD di pengelola_opd ──
+            await executeQueryWithContext(
+                `INSERT INTO pengelola_opd (user_id, opd_id) VALUES ($1, $2)`,
+                [userId, opdId], req.user
+            );
+
+            inserted.push(namaOpd);
+        }
+
+        const totalOk = inserted.length;
+        const parts: string[] = [`Berhasil menambahkan ${totalOk} OPD baru.`];
+        if (skipped.length > 0) parts.push(`${skipped.length} baris dilewati (NIK sudah ada).`);
+        if (errors.length > 0) parts.push(`${errors.length} baris gagal karena data tidak valid.`);
+
+        res.status(totalOk > 0 ? 201 : 400).json({
+            success: totalOk > 0,
+            message: parts.join(' '),
+            data: { insertedCount: totalOk, skipped, errors }
         });
-        const result = await executeQueryWithContext(
-            `INSERT INTO opd (nama_opd, alamat, kontak, pic, is_active) VALUES ${placeholders.join(', ')} RETURNING *;`,
-            values, req.user
-        );
-        res.status(201).json({ success: true, message: `Berhasil menambahkan ${result.rowCount} data OPD baru dari Excel`, insertedCount: result.rowCount });
+
     } catch (error: any) {
         console.error('Error in createBulkOpd:', error);
-        res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server saat import data Excel', errorDetail: error.message });
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server saat import Excel', errorDetail: error.message });
     }
 };
 
