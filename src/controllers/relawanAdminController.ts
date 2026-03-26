@@ -142,33 +142,42 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
 };
 
 // 5. Tambah Relawan (Single Form)
+// 5. Tambah Relawan (Single Form)
 export const createRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
-    const nama_lengkap = req.body.nama || req.body.nama_lengkap;
+    // Menangkap berbagai kemungkinan format key dari Frontend
+    const nama_lengkap = req.body.nama_lengkap || req.body.nama || req.body.namaLengkap;
     const nik = req.body.nik;
-    const alamat_ktp = req.body.alamat_ktp;
+    const alamat_ktp = req.body.alamat_ktp || req.body.alamat;
     const kelurahan = req.body.kelurahan;
-    const jabatan = req.body.jabatan;
+    const jabatan = req.body.jabatan || req.body.peran;
+    const detail_jabatan = req.body.detail_jabatan || req.body.detail;
     const penugasanText = req.body.penugasan || req.body.opd;
     const kaderText = req.body.kader || req.body.kader_kader;
-    const jenis_kelamin = req.body.jenis_kelamin || 'L';
+    const jenis_kelamin = req.body.jenis_kelamin || req.body.jenisKelamin || 'L';
+    const opdIdFromForm = req.body.opd_id; // Jika frontend sudah mengirim ID
 
     if (!nik || !nama_lengkap) {
         res.status(400).json({ success: false, message: 'NIK dan Nama wajib diisi' });
         return;
     }
 
+    const client = await pool.connect(); // Gunakan client khusus untuk transaksi
+
     try {
+        await client.query('BEGIN'); // ── TRANSAKSI DIMULAI ──
+
+        // 0. Cek Duplikasi NIK
         const checkNikQuery = `SELECT user_id FROM users WHERE nik = $1`;
-        const checkNikRes = await executeQueryWithContext(checkNikQuery, [nik], req.user);
+        const checkNikRes = await client.query(checkNikQuery, [nik]);
 
         if (checkNikRes.rows.length > 0) {
+            await client.query('ROLLBACK');
             res.status(400).json({ success: false, message: 'NIK sudah terdaftar, data tidak dapat disimpan' });
             return;
         }
 
-        const defaultPassword = nik;
         const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(defaultPassword, salt);
+        const hashedPassword = await bcrypt.hash(nik, salt);
 
         // 1. INSERT users
         const insertUserQuery = `
@@ -176,7 +185,7 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
             VALUES ($1, $2, $3, 'relawan', true)
             RETURNING user_id;
         `;
-        const userRes = await executeQueryWithContext(insertUserQuery, [nik, nama_lengkap, hashedPassword], req.user);
+        const userRes = await client.query(insertUserQuery, [nik, nama_lengkap, hashedPassword]);
         const userId = userRes.rows[0].user_id;
 
         // 2. INSERT relawan
@@ -185,52 +194,66 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
             VALUES ($1, $2, $3, $4)
             RETURNING relawan_id;
         `;
-        const relawanRes = await executeQueryWithContext(insertRelawanQuery, [
+        const relawanRes = await client.query(insertRelawanQuery, [
             userId,
             jenis_kelamin,
             alamat_ktp || '-',
             kelurahan || '-'
-        ], req.user);
+        ]);
         const relawanId = relawanRes.rows[0].relawan_id;
 
-        // 3. SELECT opd_id berdasarkan text dari autocomplete
-        let opdId: number | null = null;
-        if (penugasanText) {
-            const opdLookup = await executeQueryWithContext(
-                `SELECT opd_id FROM opd WHERE LOWER(nama_opd) = LOWER($1) LIMIT 1`,
-                [penugasanText], req.user
+        // 3. Resolve OPD ID
+        let opdId: number | null = opdIdFromForm || null;
+        if (!opdId && penugasanText && penugasanText !== '-') {
+            const opdLookup = await client.query(
+                `SELECT opd_id FROM opd WHERE LOWER(TRIM(nama_opd)) = LOWER(TRIM($1)) LIMIT 1`,
+                [penugasanText]
             );
-            if (opdLookup.rows.length > 0) {
-                opdId = opdLookup.rows[0].opd_id;
-            }
+            if (opdLookup.rows.length > 0) opdId = opdLookup.rows[0].opd_id;
         }
 
-        // 4. SELECT kader_id berdasarkan text dari autocomplete
+        // 4. Resolve Kader ID (MENGGUNAKAN LOGIKA FALLBACK DARI KAMU)
         let kaderId: number | null = null;
-        if (kaderText) {
-            const paramKader = opdId ? [kaderText, opdId] : [kaderText];
-            const kaderQuery = opdId
-                ? `SELECT kader_id FROM kader WHERE LOWER(nama_kader) = LOWER($1) AND opd_id = $2 LIMIT 1`
-                : `SELECT kader_id FROM kader WHERE LOWER(nama_kader) = LOWER($1) LIMIT 1`;
+        const namaKader = kaderText ? kaderText.trim() : '';
 
-            const kaderLookup = await executeQueryWithContext(kaderQuery, paramKader, req.user);
+        if (!kaderId && namaKader && namaKader !== '-') {
+            // Coba dulu dengan filter opd_id (lebih presisi)
+            const kaderLookup = await client.query(
+                `SELECT kader_id FROM kader 
+                 WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) AND opd_id = $2 LIMIT 1`,
+                [namaKader, opdId]
+            );
             if (kaderLookup.rows.length > 0) {
                 kaderId = kaderLookup.rows[0].kader_id;
+            } else {
+                // Fallback: cari by nama saja tanpa filter opd_id
+                const kaderFallback = await client.query(
+                    `SELECT kader_id FROM kader 
+                     WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) LIMIT 1`,
+                    [namaKader]
+                );
+                if (kaderFallback.rows.length > 0) {
+                    kaderId = kaderFallback.rows[0].kader_id;
+                }
             }
         }
 
         // 5. INSERT penugasan_relawan
         const insertPenugasanQuery = `
-            INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, penugasan, status_keaktifan)
-            VALUES ($1, $2, $3, $4, $5, 'Aktif')
+            INSERT INTO penugasan_relawan 
+                (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, penugasan, status_keaktifan)
+            VALUES ($1, $2, $3, $4, $5, $6, 'Aktif')
         `;
-        await executeQueryWithContext(insertPenugasanQuery, [
+        await client.query(insertPenugasanQuery, [
             relawanId,
-            opdId,
+            opdId || null,
             kaderId,
             jabatan || null,
+            detail_jabatan || null,
             penugasanText || null
-        ], req.user);
+        ]);
+
+        await client.query('COMMIT'); // ── SIMPAN PERMANEN ──
 
         res.status(201).json({
             success: true,
@@ -238,8 +261,11 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
         });
 
     } catch (error: any) {
-        console.error('Error in createRelawan:', error);
+        await client.query('ROLLBACK'); // ── BATALKAN JIKA ADA ERROR ──
+        console.error('Error in createRelawan (Single):', error);
         res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server saat menambahkan data relawan' });
+    } finally {
+        client.release(); // Sangat penting: kembalikan koneksi!
     }
 };
 
