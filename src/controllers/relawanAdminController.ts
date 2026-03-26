@@ -370,11 +370,25 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     const namaKader: string = (assign.kader || '').trim();
 
                     if (!kaderId && namaKader && namaKader !== '-') {
+                        // Coba dulu dengan filter opd_id (lebih presisi)
                         const kaderLookup = await client.query(
-                            `SELECT kader_id FROM kader WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) AND opd_id = $2 LIMIT 1`,
+                            `SELECT kader_id FROM kader 
+                            WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) AND opd_id = $2 LIMIT 1`,
                             [namaKader, opdId]
                         );
-                        if (kaderLookup.rows.length > 0) kaderId = kaderLookup.rows[0].kader_id;
+                        if (kaderLookup.rows.length > 0) {
+                            kaderId = kaderLookup.rows[0].kader_id;
+                        } else {
+                            // Fallback: cari by nama saja tanpa filter opd_id
+                            const kaderFallback = await client.query(
+                                `SELECT kader_id FROM kader 
+                                WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) LIMIT 1`,
+                                [namaKader]
+                            );
+                            if (kaderFallback.rows.length > 0) {
+                                kaderId = kaderFallback.rows[0].kader_id;
+                            }
+                        }
                     }
 
                     // Insert Penugasan
