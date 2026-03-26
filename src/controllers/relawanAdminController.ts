@@ -13,7 +13,7 @@ export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<vo
                 u.user_id, u.nik, u.nama_lengkap, u.email, u.no_hp, u.is_active,
                 r.relawan_id, r.jenis_kelamin,
                 r.alamat_ktp, r.kelurahan,
-                pr.penugasan, pr.status_keaktifan AS status_penugasan,
+                pr.penugasan_id, pr.penugasan, pr.jabatan, pr.detail_jabatan, pr.status_keaktifan AS status_penugasan,
                 o.nama_opd, k.nama_kader
             FROM users u
             JOIN relawan r ON u.user_id = r.user_id
