@@ -40,7 +40,7 @@ export const getSkByOpd = async (req: OpdAuthRequest, res: Response): Promise<vo
         const result = await executeQueryWithContext(`
             SELECT 
                 sk.sk_id, sk.nomor_sk, sk.judul_sk, sk.tanggal_terbit, 
-                sk.batas_aktif, sk.status, sk.file_path,
+                sk.batas_aktif, sk.status,
                 (SELECT COUNT(*) FROM penugasan_relawan pr WHERE pr.sk_id = sk.sk_id) as jumlah_relawan
             FROM surat_keputusan sk
             WHERE sk.opd_id = $1
@@ -67,8 +67,6 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
     const kelurahan = req.body.kelurahan;
     const jenis_kelamin = req.body.jenis_kelamin || req.body.jenisKelamin || 'L';
 
-    // Tangkap data penugasan dari frontend
-    // Frontend mungkin mengirim array 'assignments', ambil index [0] saja
     const assignment = req.body.assignments && req.body.assignments.length > 0 
         ? req.body.assignments[0] 
         : req.body;
@@ -87,7 +85,6 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
     try {
         await client.query('BEGIN');
 
-        // 0. Cek Duplikasi NIK
         const checkNikQuery = `SELECT user_id FROM users WHERE nik = $1`;
         const checkNikRes = await client.query(checkNikQuery, [nik]);
 
@@ -100,7 +97,6 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(nik, salt);
 
-        // 1. INSERT users
         const userRes = await client.query(
             `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
              VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id;`,
@@ -108,7 +104,6 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
         );
         const userId = userRes.rows[0].user_id;
 
-        // 2. INSERT relawan
         const relawanRes = await client.query(
             `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
              VALUES ($1, $2, $3, $4) RETURNING relawan_id;`,
@@ -116,7 +111,6 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
         );
         const relawanId = relawanRes.rows[0].relawan_id;
 
-        // 3. Resolve Kader ID (Hanya mencari di dalam instansi OPD ini)
         let kaderId: number | null = null;
         const namaKader = kaderText ? kaderText.trim() : '';
 
@@ -130,7 +124,6 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
             }
         }
 
-        // 4. INSERT Penugasan (Paksa opd_id dari token)
         await client.query(
             `INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, status_keaktifan)
              VALUES ($1, $2, $3, $4, $5, 'Aktif')`,
@@ -149,7 +142,7 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
     }
 };
 
-// 4. Tambah Relawan Excel Khusus OPD (Bulk - Upsert Logic)
+// 4. Tambah Relawan Excel Khusus OPD (Bulk - FIXED VERSION)
 export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     const rawData = req.body;
     const opdId = req.opd_id; // 🔒 Paksa gunakan OPD ID dari token
@@ -168,7 +161,6 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
             const rawItem = rawData[i];
             const rowNumber = i + 1;
 
-            // Fuzzy Key Normalization
             const item: Record<string, any> = {};
             for (const key of Object.keys(rawItem)) {
                 item[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = rawItem[key];
@@ -201,7 +193,6 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                 let userId: number;
                 let relawanId: number;
 
-                // --- UPSERT LOGIC (Cek NIK) ---
                 const checkRes = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nik]);
                 
                 if (checkRes.rows.length > 0) {
@@ -210,7 +201,13 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                     if (getRelawan.rows.length > 0) {
                         relawanId = getRelawan.rows[0].relawan_id;
                     } else {
-                        throw new Error(`Data Corrupt: NIK ditemukan tapi profil relawan tidak ada.`);
+                        // User ada tapi profil relawan tidak ada - create relawan profile
+                        const relawanRes = await client.query(
+                            `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                             VALUES ($1, $2, $3, $4) RETURNING relawan_id`,
+                            [userId, jenisKelamin, alamat, kelurahan]
+                        );
+                        relawanId = relawanRes.rows[0].relawan_id;
                     }
                 } else {
                     const salt = await bcrypt.genSalt(10);
@@ -240,20 +237,36 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                     );
                     if (kaderLookup.rows.length > 0) kaderId = kaderLookup.rows[0].kader_id;
                 }
-
-                // Insert/Update Penugasan
-                await client.query(
-                    `INSERT INTO penugasan_relawan
-                        (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, status_keaktifan)
-                     VALUES ($1, $2, $3, $4, $5, 'Aktif')
-                     ON CONFLICT (relawan_id, opd_id) DO UPDATE
-                         SET kader_id = EXCLUDED.kader_id,
-                             jabatan = EXCLUDED.jabatan,
-                             detail_jabatan = EXCLUDED.detail_jabatan,
-                             status_keaktifan = EXCLUDED.status_keaktifan,
-                             updated_at = CURRENT_TIMESTAMP`,
-                    [relawanId, opdId, kaderId, peran, detail]
+                
+                // ✅ FIXED: Menggunakan variabel 'peran' dan 'detail' dari ekstraksi Excel
+                const checkPenugasan = await client.query(
+                    `SELECT penugasan_id FROM penugasan_relawan 
+                     WHERE relawan_id = $1 
+                       AND opd_id = $2 
+                       AND kader_id IS NOT DISTINCT FROM $3 
+                       AND jabatan IS NOT DISTINCT FROM $4`,
+                    [relawanId, opdId, kaderId, peran || null]
                 );
+
+                if (checkPenugasan.rows.length > 0) {
+                    // UPDATE existing penugasan
+                    await client.query(
+                        `UPDATE penugasan_relawan
+                         SET detail_jabatan = $1,
+                             status_keaktifan = $2,
+                             updated_at = CURRENT_TIMESTAMP
+                         WHERE penugasan_id = $3`,
+                        [detail || null, 'Aktif', checkPenugasan.rows[0].penugasan_id]
+                    );
+                } else {
+                    // INSERT new penugasan
+                    await client.query(
+                        `INSERT INTO penugasan_relawan
+                            (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, status_keaktifan)
+                         VALUES ($1, $2, $3, $4, $5, 'Aktif')`,
+                        [relawanId, opdId, kaderId, peran || null, detail || null]
+                    );
+                }
 
                 await client.query('COMMIT');
                 insertedCount++;

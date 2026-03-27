@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS public.penugasan_relawan
     penugasan character varying(100) COLLATE pg_catalog."default",
     detail_jabatan character varying(255) COLLATE pg_catalog."default",
     CONSTRAINT penugasan_relawan_pkey PRIMARY KEY (penugasan_id),
-    CONSTRAINT uniq_penugasan_relawan_opd UNIQUE (relawan_id, opd_id)
+    CONSTRAINT uniq_penugasan_relawan_sk UNIQUE (relawan_id, sk_id)
 );
 
 ALTER TABLE IF EXISTS public.penugasan_relawan

@@ -243,7 +243,7 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
     }
 };
 
-// 6. Tambah Relawan Bulk (dari Excel & Form Manual)
+// 6. Tambah Relawan Bulk (dari Excel & Form Manual) - FIXED VERSION
 export const createBulkRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
     const rawData = req.body;
 
@@ -254,17 +254,12 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
 
     // ── Helper: Normalisasi menangkap format Excel & format Axios Frontend ──────
     const normalizeItem = (raw: any) => {
-        // 1. Buat versi "bersih" dari data Excel
-        // Menghapus SEMUA spasi, underscore, strip, dll, dan ubah ke huruf kecil
         const cleanExcelData: Record<string, any> = {};
         for (const key of Object.keys(raw)) {
             const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, ''); 
             cleanExcelData[cleanKey] = raw[key];
         }
 
-        // 2. Helper untuk mencari data. Prioritas: 
-        // - Cek key bawaan frontend (karena form manual mengirim key rapi seperti 'jenis_kelamin')
-        // - Cek dari kumpulan kemungkinan nama kolom Excel yang sudah dibersihkan
         const getVal = (frontendKey: string, possibleExcelKeys: string[]) => {
             if (raw[frontendKey] !== undefined) return String(raw[frontendKey]);
             for (const key of possibleExcelKeys) {
@@ -288,7 +283,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
         };
     };
 
-    const client = await pool.connect(); // Menggunakan client khusus untuk transaksi
+    const client = await pool.connect();
     let insertedCount = 0;
     const skippedNIK: string[] = [];
     const errors: string[] = [];
@@ -297,7 +292,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
         for (let i = 0; i < rawData.length; i++) {
             const rawItem = rawData[i];
             const item = normalizeItem(rawItem);
-            const rowNumber = i + 1; // Membantu identifikasi baris di Excel
+            const rowNumber = i + 2; // Excel row number (header = row 1)
 
             if (!item.nik || !item.namaLengkap) {
                 errors.push(`Baris ${rowNumber} dilewati: NIK atau Nama Lengkap kosong.`);
@@ -305,7 +300,6 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
             }
 
             try {
-                // ── TRANSAKSI DIMULAI PER BARIS ──
                 await client.query('BEGIN');
 
                 let userId: number;
@@ -315,18 +309,23 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                 const checkRes = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [item.nik]);
                 
                 if (checkRes.rows.length > 0) {
-                    // JIKA NIK ADA: Jangan batalkan transaksi! Ambil ID-nya
+                    // NIK sudah ada - ambil ID-nya
                     userId = checkRes.rows[0].user_id;
                     const getRelawan = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
                     
                     if (getRelawan.rows.length > 0) {
                         relawanId = getRelawan.rows[0].relawan_id;
-                        // Hapus NIK dari skippedNIK karena sekarang kita proses penugasannya
                     } else {
-                        throw new Error(`User dengan NIK ${item.nik} ditemukan, tetapi profil relawan tidak ada (Data Corrupt).`);
+                        // User ada tapi profil relawan tidak ada - create relawan profile
+                        const relawanRes = await client.query(
+                            `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                             VALUES ($1, $2, $3, $4) RETURNING relawan_id`,
+                            [userId, item.jenisKelamin, item.alamat, item.kelurahan]
+                        );
+                        relawanId = relawanRes.rows[0].relawan_id;
                     }
                 } else {
-                    // JIKA NIK BARU: Buat User dan Relawan baru
+                    // NIK baru - Buat User dan Relawan baru
                     const salt = await bcrypt.genSalt(10);
                     const hashedPassword = await bcrypt.hash(item.nik, salt);
                     
@@ -345,7 +344,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     relawanId = relawanRes.rows[0].relawan_id;
                 }
 
-                // 3. Setup Penugasan
+                // Setup Penugasan
                 const assignmentsToProcess: any[] = item.assignments && item.assignments.length > 0
                     ? item.assignments
                     : [{
@@ -371,7 +370,6 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     }
 
                     if (!opdId) {
-                        // Jika OPD tidak ditemukan, catat warning, tapi jangan gagalkan insert relawannya
                         errors.push(`Baris ${rowNumber} (NIK ${item.nik}): OPD "${namaOpd}" tidak ditemukan. Data relawan tersimpan, tapi tanpa penugasan.`);
                         continue; 
                     }
@@ -381,7 +379,6 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     const namaKader: string = (assign.kader || '').trim();
 
                     if (!kaderId && namaKader && namaKader !== '-') {
-                        // Coba dulu dengan filter opd_id (lebih presisi)
                         const kaderLookup = await client.query(
                             `SELECT kader_id FROM kader 
                             WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) AND opd_id = $2 LIMIT 1`,
@@ -390,7 +387,6 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                         if (kaderLookup.rows.length > 0) {
                             kaderId = kaderLookup.rows[0].kader_id;
                         } else {
-                            // Fallback: cari by nama saja tanpa filter opd_id
                             const kaderFallback = await client.query(
                                 `SELECT kader_id FROM kader 
                                 WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) LIMIT 1`,
@@ -402,41 +398,61 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                         }
                     }
 
-                    // Insert Penugasan
-                    await client.query(
-                        `INSERT INTO penugasan_relawan
-                            (relawan_id, opd_id, kader_id, jabatan, penugasan, detail_jabatan, status_keaktifan)
-                         VALUES ($1, $2, $3, $4, $5, $6, $7)
-                         ON CONFLICT (relawan_id, opd_id) DO UPDATE
-                             SET kader_id = EXCLUDED.kader_id,
-                                 jabatan = EXCLUDED.jabatan,
-                                 penugasan = EXCLUDED.penugasan,
-                                 detail_jabatan = EXCLUDED.detail_jabatan,
-                                 status_keaktifan = EXCLUDED.status_keaktifan,
-                                 updated_at = CURRENT_TIMESTAMP`,
-                        [
-                            relawanId,
-                            opdId,
-                            kaderId,
-                            assign.peran || null,
-                            assign.penugasan || namaOpd || null,
-                            assign.detail || null,
-                            assign.statusKeaktifan || 'Aktif',
-                        ]
+  // ✅ FIXED: Menggunakan assign.peran, assign.detail, assign.penugasan
+                    const checkPenugasan = await client.query(
+                        `SELECT penugasan_id FROM penugasan_relawan 
+                         WHERE relawan_id = $1 
+                           AND opd_id = $2 
+                           AND kader_id IS NOT DISTINCT FROM $3 
+                           AND jabatan IS NOT DISTINCT FROM $4`,
+                        [relawanId, opdId, kaderId, assign.peran || assign.jabatan || null]
                     );
-                }
 
-                await client.query('COMMIT'); // Simpan baris ini secara permanen
+                    if (checkPenugasan.rows.length > 0) {
+                        // UPDATE existing penugasan
+                        await client.query(
+                            `UPDATE penugasan_relawan
+                             SET detail_jabatan = $1,
+                                 penugasan = $2,
+                                 status_keaktifan = $3,
+                                 updated_at = CURRENT_TIMESTAMP
+                             WHERE penugasan_id = $4`,
+                            [
+                                assign.detail || assign.detailJabatan || null, 
+                                assign.penugasan || namaOpd || null,
+                                assign.statusKeaktifan || 'Aktif', 
+                                checkPenugasan.rows[0].penugasan_id
+                            ]
+                        );
+                    } else {
+                        // INSERT new penugasan
+                        await client.query(
+                            `INSERT INTO penugasan_relawan
+                                (relawan_id, opd_id, kader_id, jabatan, penugasan, detail_jabatan, status_keaktifan)
+                             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                            [
+                                relawanId, 
+                                opdId, 
+                                kaderId, 
+                                assign.peran || assign.jabatan || null, 
+                                assign.penugasan || namaOpd || null,
+                                assign.detail || assign.detailJabatan || null,
+                                assign.statusKeaktifan || 'Aktif'
+                            ]
+                        );
+                    }
+            }
+
+                await client.query('COMMIT');
                 insertedCount++;
 
             } catch (rowError: any) {
-                await client.query('ROLLBACK'); // Batalkan HANYA baris ini jika gagal
+                await client.query('ROLLBACK');
                 console.error(`Error processing row ${rowNumber}:`, rowError);
                 errors.push(`Baris ${rowNumber} gagal diproses: ${rowError.message}`);
             }
         }
 
-        // Response final merangkum hasil seluruh looping
         const parts: string[] = [`Berhasil menambahkan ${insertedCount} relawan.`];
         if (skippedNIK.length > 0) parts.push(`${skippedNIK.length} NIK dilewati (sudah terdaftar).`);
         if (errors.length > 0) parts.push(`Ada ${errors.length} peringatan/error (cek detail).`);
@@ -455,9 +471,10 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
             errorDetail: fatalError.message
         });
     } finally {
-        client.release(); // Sangat penting: kembalikan koneksi ke pool
+        client.release();
     }
 };
+
 
 // 7. Dapatkan daftar kader berdasarkan opd_id (untuk dropdown di form)
 export const getkaderByOpd = async (req: AuthRequest, res: Response): Promise<void> => {
