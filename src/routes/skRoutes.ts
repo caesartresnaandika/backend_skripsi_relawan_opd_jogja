@@ -1,38 +1,73 @@
+//skRoutes.ts
 import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 import multer from 'multer';
 import { 
     getAllSK,
     getSKById,
-    createSKDetail,
-    updateSKStatus
+    getSKPdf,
+    getOPDList,
+    createSK,
+    updateSKStatus,
+    deleteSK
 } from '../controllers/skController';
 
 const router = Router();
 
-// Konfigurasi Multer untuk upload file (kita gunakan memoryStorage dulu untuk dikirim ke cloud storage/disimpan ke lokal nantinya)
-// Atau untuk simple demo: diskStorage. Kita pakai memoryStorage biar mudah dimodifikasi nantinya ke S3/Supabase Storage
+// Konfigurasi Multer untuk upload file PDF
 const upload = multer({ 
     storage: multer.memoryStorage(),
     limits: {
-        fileSize: 5 * 1024 * 1024 // 5MB limit
+        fileSize: 2 * 1024 * 1024 // 2MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/pdf') {
+            cb(null, true);
+        } else {
+            cb(new Error('Hanya file PDF yang diperbolehkan'));
+        }
     }
 });
 
-// Endpoint ini wajib dilindungi khusus untuk Super Admin
-router.use(verifyToken, authorizeRole('super_admin'));
+// Middleware untuk handle error multer
+const handleMulterError = (err: any, req: any, res: any, next: any) => {
+    if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Ukuran file terlalu besar. Maksimal 2MB.',
+                error_code: 'FILE_TOO_LARGE'
+            });
+        }
+        return res.status(400).json({ success: false, message: err.message });
+    } else if (err) {
+        return res.status(400).json({ success: false, message: err.message });
+    }
+    next();
+};
 
-// URL: GET http://localhost:3000/api/admin/sk
+// Protect all routes - hanya super_admin dan opd yang bisa akses
+router.use(verifyToken, authorizeRole('super_admin', 'opd'));
+
+// URL: GET /api/admin/sk
 router.get('/', getAllSK);
 
-// URL: POST http://localhost:3000/api/admin/sk
-// Gunakan middleware upload.single('file') untuk memproses form-data dengan nama field 'file'
-router.post('/', upload.single('file'), createSKDetail);
+// URL: GET /api/admin/sk/opd-list (Dropdown OPD)
+router.get('/opd-list', getOPDList);
 
-// URL: GET http://localhost:3000/api/admin/sk/:id  (TARUH DI BAWAH RUTE STATIS JIKA ADA)
+// URL: POST /api/admin/sk (Upload PDF)
+router.post('/', upload.single('file'), handleMulterError, createSK);
+
+// URL: GET /api/admin/sk/:id
 router.get('/:id', getSKById);
 
-// URL: PATCH http://localhost:3000/api/admin/sk/:id/status
+// URL: GET /api/admin/sk/:id/pdf
+router.get('/:id/pdf', getSKPdf);
+
+// URL: PATCH /api/admin/sk/:id/status
 router.patch('/:id/status', updateSKStatus);
+
+// URL: DELETE /api/admin/sk/:id
+router.delete('/:id', deleteSK);
 
 export default router;
