@@ -1,13 +1,22 @@
-//authMiddleware
+// authMiddleware.ts
+
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { Express } from 'express';  // ✅ Import Express type
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Custom Type: Request yang membawa data User (PENTING DI TS)
+// ✅ Custom Type: Request yang membawa data User
 export interface AuthRequest extends Request {
-    user?: any;
+    user?: {
+        id: number;
+        role: string;
+        opd_id?: number;
+        nama_opd?: string;
+    };
+    file?: Express.Multer.File;  // ✅ Untuk multer single file
+    files?: Express.Multer.File[];  // ✅ Untuk multer multiple files
 }
 
 const verifyToken = (req: AuthRequest, res: Response, next: NextFunction): void => {
@@ -21,7 +30,15 @@ const verifyToken = (req: AuthRequest, res: Response, next: NextFunction): void 
 
     try {
         const verified = jwt.verify(token, process.env.JWT_SECRET || 'rahasia_skripsi_caesar');
-        req.user = verified;
+        
+        // ✅ FIXED: Type assertion untuk JWT payload
+        req.user = verified as {
+            id: number;
+            role: string;
+            opd_id?: number;
+            nama_opd?: string;
+        };
+        
         next();
     } catch (err) {
         res.status(400).json({ message: 'Token Tidak Valid!' });
