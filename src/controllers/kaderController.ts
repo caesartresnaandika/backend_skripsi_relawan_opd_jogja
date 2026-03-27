@@ -455,3 +455,103 @@ export const deleteKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };
+
+// Pastikan bcrypt dan pool (db) sudah di-import di atas file ini
+
+export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
+    const data = req.body;
+    const opdId = req.opd_id; // 🔒 KUNCI KEAMANAN: Paksa pakai ID instansi dari token
+
+    if (!Array.isArray(data) || data.length === 0) {
+        res.status(400).json({ success: false, message: 'Data harus berupa array yang tidak kosong' });
+        return;
+    }
+
+    const inserted: string[] = [];
+    const skipped: string[] = [];
+    const errors: string[] = [];
+    const client = await pool.connect();
+
+    try {
+        for (let i = 0; i < data.length; i++) {
+            const rawItem = data[i];
+            const rowNumber = i + 1;
+
+            // Fuzzy Key Normalization
+            const item: Record<string, any> = {};
+            for (const key of Object.keys(rawItem)) {
+                item[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = rawItem[key];
+            }
+
+            const getVal = (possibleKeys: string[]) => {
+                for (const key of possibleKeys) {
+                    if (item[key] !== undefined) return String(item[key]);
+                }
+                return '';
+            };
+
+            const namaKader = getVal(['namakader', 'kader', 'nama']).trim();
+            const nikPic    = getVal(['nikpic', 'nik', 'picnik']).trim();
+            const pic       = getVal(['pic', 'namapic', 'penanggungjawab']).trim() || null;
+            const deskripsi = getVal(['deskripsi', 'keterangan']).trim() || null;
+
+            if (!namaKader) {
+                errors.push(`Baris ${rowNumber}: Nama Kader kosong`);
+                continue;
+            }
+            if (!nikPic || nikPic.length !== 16) {
+                errors.push(`Baris ${rowNumber} ("${namaKader}"): NIK PIC harus 16 digit`);
+                continue;
+            }
+
+            try {
+                await client.query('BEGIN');
+
+                const checkNik = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nikPic]);
+                if (checkNik.rows.length > 0) {
+                    skipped.push(`"${namaKader}" (NIK PIC sudah terdaftar)`);
+                    await client.query('ROLLBACK');
+                    continue;
+                }
+
+                const salt = await bcrypt.genSalt(10);
+                const hashedPassword = await bcrypt.hash(nikPic, salt);
+                const userRes = await client.query(
+                    `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
+                     VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id`,
+                    [nikPic, pic || namaKader, hashedPassword]
+                );
+                const userId = userRes.rows[0].user_id;
+
+                // Insert kader dengan mengabaikan kolom OPD di Excel dan memaksa pakai opdId token
+                await client.query(
+                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id, is_active)
+                     VALUES ($1, $2, $3, $4, $5, $6, true)`,
+                    [opdId, namaKader, deskripsi, pic, nikPic, userId] 
+                );
+
+                await client.query('COMMIT');
+                inserted.push(namaKader);
+            } catch (rowError: any) {
+                await client.query('ROLLBACK');
+                errors.push(`Baris ${rowNumber} ("${namaKader}") gagal: ${rowError.message}`);
+            }
+        }
+
+        const totalOk = inserted.length;
+        const parts: string[] = [`Berhasil menambahkan ${totalOk} kader.`];
+        if (skipped.length > 0) parts.push(`${skipped.length} dilewati (NIK ada).`);
+        if (errors.length > 0) parts.push(`${errors.length} bermasalah.`);
+
+        res.status(totalOk > 0 ? 201 : 400).json({
+            success: totalOk > 0,
+            message: parts.join(' '),
+            data: { insertedCount: totalOk, skipped, errors }
+        });
+    } catch (fatalError: any) {
+        console.error('Error in createBulkKaderByOpd:', fatalError);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server saat import Excel' });
+    } finally {
+        client.release();
+    }
+};
