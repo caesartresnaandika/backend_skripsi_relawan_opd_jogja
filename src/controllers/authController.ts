@@ -41,32 +41,64 @@ export const login = async (req: Request, res: Response) => {
 
     try {
         // 1. Cari user berdasarkan NIK
-        const user = await pool.query('SELECT * FROM users WHERE nik = $1', [nik]);
+        const userQuery = await pool.query('SELECT * FROM users WHERE nik = $1', [nik]);
 
-        if (user.rows.length === 0) {
+        if (userQuery.rows.length === 0) {
             return res.status(400).json({ message: 'NIK tidak ditemukan' });
         }
 
-        // 2. Cek Password (Bandingkan password input vs password database)
-        const validPassword = await bcrypt.compare(password, user.rows[0].password);
+        const user = userQuery.rows[0];
+
+        // 2. Cek Password
+        const validPassword = await bcrypt.compare(password, user.password);
         if (!validPassword) {
             return res.status(400).json({ message: 'Password salah!' });
         }
 
-        // 3. Buat Token (JWT) sebagai tiket masuk
+        // ✨ 3. Penyelidikan Ekstra Khusus OPD ✨
+        let opd_id = null;
+        let nama_opd = null;
+
+        if (user.role === 'opd') {
+            // Cari data instansinya di tabel pengelola_opd dan join ke tabel opd
+            const opdQuery = await pool.query(`
+                SELECT po.opd_id, o.nama_opd 
+                FROM pengelola_opd po
+                JOIN opd o ON po.opd_id = o.opd_id
+                WHERE po.user_id = $1
+            `, [user.user_id]);
+
+            if (opdQuery.rows.length > 0) {
+                opd_id = opdQuery.rows[0].opd_id;
+                nama_opd = opdQuery.rows[0].nama_opd;
+            } else {
+                // Opsional: Bisa diblokir login-nya jika dia OPD tapi tidak punya instansi
+                console.warn(`User ${user.nama_lengkap} (OPD) belum di-assign ke instansi mana pun.`);
+            }
+        }
+
+        // 4. Buat Token (JWT)
         const token = jwt.sign(
-            { id: user.rows[0].user_id, role: user.rows[0].role },
-            process.env.JWT_SECRET || 'rahasia_skripsi_caesar', // Pastikan ada di .env
-            { expiresIn: '2h' }
+            { 
+                id: user.user_id, 
+                role: user.role,
+                // Sisipkan juga opd_id ke dalam token agar backend selalu tahu
+                opd_id: opd_id 
+            },
+            process.env.JWT_SECRET || 'rahasia_skripsi_caesar', 
+            { expiresIn: '8h' } // Diperpanjang sedikit agar tidak cepat ter-logout saat demo
         );
 
+        // 5. Kirim Respons Lengkap ke Frontend
         res.json({
             message: 'Login Berhasil!',
             token: token,
             user: {
-                nik: user.rows[0].nik,
-                nama: user.rows[0].nama_lengkap,
-                role: user.rows[0].role
+                nik: user.nik,
+                nama: user.nama_lengkap,
+                role: user.role,
+                opd_id: opd_id,     // Backend kini memberitahu Frontend ID instansi
+                nama_opd: nama_opd  // Backend kini memberitahu Frontend Nama instansi
             }
         });
 

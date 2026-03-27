@@ -132,14 +132,23 @@ export const getOPDList = async (req: AuthRequest, res: Response): Promise<void>
 
 // 5. Buat SK dengan Upload PDF (Base64) + Validasi Lengkap
 export const createSK = async (req: AuthRequest, res: Response): Promise<void> => {
+    // Tangkap data dari body
     const { 
         nomor_sk, 
         judul_sk, 
         tanggal_terbit, 
         batas_aktif, 
-        opd_id,
         daftar_relawan 
     } = req.body;
+
+    // ✨ FIXED: Logika Penentuan OPD (Role-Aware)
+    // Jika Super Admin, ambil dari req.body. Jika OPD Admin, PAKSA ambil dari req.user.opd_id (Token)
+    const opd_id = req.user?.role === 'opd' ? (req as any).opd_id : req.body.opd_id;
+
+    if (!opd_id) {
+        res.status(400).json({ success: false, message: 'OPD ID tidak valid atau tidak disertakan.' });
+        return;
+    }
 
     const client = await pool.connect();
 
