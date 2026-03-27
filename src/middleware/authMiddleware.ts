@@ -15,8 +15,8 @@ export interface AuthRequest extends Request {
         opd_id?: number;
         nama_opd?: string;
     };
-    file?: Express.Multer.File;  // ✅ Untuk multer single file
-    files?: Express.Multer.File[];  // ✅ Untuk multer multiple files
+    file?: any;  // ✅ Untuk multer single file
+    files?: any;  // ✅ Untuk multer multiple files
 }
 
 const verifyToken = (req: AuthRequest, res: Response, next: NextFunction): void => {

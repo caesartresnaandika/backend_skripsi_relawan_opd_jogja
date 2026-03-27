@@ -124,7 +124,7 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
             SET status = $1, catatan_verifikator = $2, tanggal_verifikasi = CURRENT_TIMESTAMP, verifikator_id = $3
             WHERE pengajuan_id = $4
         `;
-        await executeQueryWithContext(updatePengajuanQuery, [status, catatan_verifikator || null, req.user.id, id], req.user);
+        await executeQueryWithContext(updatePengajuanQuery, [status, catatan_verifikator || null, req.user!, id], req.user);
 
         if (status === 'Disetujui' && pengajuan.data_baru) {
             // IMPLEMENTASI MENDATANG: Eksekusi update dinamis ke tabel Relawan/Users sesuai isi data_baru

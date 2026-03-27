@@ -82,7 +82,7 @@ export const getAllSaran = async (req: AuthRequest, res: Response): Promise<void
 export const createSaran = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { subjek, pesan } = req.body;
-        const userId = req.user?.user_id;
+        const userId = req.user?.id;
 
         if (!pesan) {
             res.status(400).json({ success: false, message: 'Field "pesan" wajib diisi' });
