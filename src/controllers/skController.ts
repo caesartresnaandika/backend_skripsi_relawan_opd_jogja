@@ -344,45 +344,41 @@ export const createSK = async (req: AuthRequest, res: Response): Promise<void> =
         // ============================================
         // PROSES: Tugaskan Relawan ke SK ini
         // ============================================
-        // ============================================
-        // PROSES: Tugaskan Relawan ke SK ini
-        // ============================================
         const penugasanBerhasil = [];
         const penugasanGagal = [];
 
         for (const rlwn of validRelawan) {
             try {
-                // ✅ FIXED: Cek apakah relawan sudah punya penugasan ini (OPD + Kader + Jabatan)
+                // ✅ FIXED: Cari penugasan yang ada (lebih flexible)
                 const checkPenugasan = await client.query(
                     `SELECT penugasan_id FROM penugasan_relawan 
-                     WHERE relawan_id = $1 
-                       AND opd_id = $2 
-                       AND kader_id IS NOT DISTINCT FROM $3 
-                       AND jabatan IS NOT DISTINCT FROM $4`,
-                    [rlwn.relawan_id, opd_id, rlwn.kader_id, rlwn.jabatan || null]
+                    WHERE relawan_id = $1 AND opd_id = $2`,
+                    [rlwn.relawan_id, opd_id]
                 );
 
                 let currentPenugasanId;
 
                 if (checkPenugasan.rows.length > 0) {
-                    // JIKA PENUGASAN SUDAH ADA: Update saja dengan menempelkan sk_id baru
+                    // JIKA PENUGASAN SUDAH ADA: Update sk_id saja
                     currentPenugasanId = checkPenugasan.rows[0].penugasan_id;
                     await client.query(
                         `UPDATE penugasan_relawan 
-                         SET sk_id = $1, 
-                             status_keaktifan = 'Aktif', 
-                             updated_at = CURRENT_TIMESTAMP
-                         WHERE penugasan_id = $2`,
-                        [new_sk_id, currentPenugasanId]
+                        SET sk_id = $1, 
+                            status_keaktifan = 'Aktif',
+                            jabatan = COALESCE($2, jabatan),
+                            kader_id = COALESCE($3, kader_id),
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE penugasan_id = $4`,
+                        [new_sk_id, rlwn.jabatan, rlwn.kader_id, currentPenugasanId]
                     );
                 } else {
-                    // JIKA PENUGASAN BELUM ADA: Insert sebagai penugasan baru yang langsung ber-SK
+                    // JIKA PENUGASAN BELUM ADA: Insert baru dengan sk_id
                     const insertRes = await client.query(
                         `INSERT INTO penugasan_relawan (
                             relawan_id, opd_id, kader_id, sk_id, jabatan, status_keaktifan
                         )
-                         VALUES ($1, $2, $3, $4, $5, 'Aktif')
-                         RETURNING penugasan_id`,
+                        VALUES ($1, $2, $3, $4, $5, 'Aktif')
+                        RETURNING penugasan_id`,
                         [rlwn.relawan_id, opd_id, rlwn.kader_id, new_sk_id, rlwn.jabatan || null]
                     );
                     currentPenugasanId = insertRes.rows[0].penugasan_id;
