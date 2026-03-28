@@ -1,4 +1,3 @@
-//kaderRoutes.ts
 import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 import {
@@ -13,16 +12,15 @@ import {
 
 const router = Router();
 
-router.use(verifyToken, authorizeRole('super_admin'));
+// ✅ FIXED: Izinkan super_admin DAN opd
+router.use(verifyToken as any, authorizeRole('super_admin', 'opd') as any);
 
-router.get('/', getAllKader);
-
-router.post('/bulk', createBulkKader);
-
-router.get('/:id', getKaderById);
-router.post('/', createKader);
-router.put('/:id', updateKader);
-router.delete('/:id', deleteKader);
-router.patch('/:id/status', toggleKaderStatus);
+router.get('/', getAllKader as any);
+router.post('/bulk', createBulkKader as any);
+router.get('/:id', getKaderById as any);
+router.post('/', createKader as any);
+router.put('/:id', updateKader as any);
+router.delete('/:id', deleteKader as any);
+router.patch('/:id/status', toggleKaderStatus as any);
 
 export default router;

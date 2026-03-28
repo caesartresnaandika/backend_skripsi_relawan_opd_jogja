@@ -4,10 +4,7 @@ import { changePassword } from '../controllers/profileController';
 
 const router = Router();
 
-// Semua role yang sudah login bisa akses
-router.use(verifyToken);
-
-// PATCH /api/profile/change-password
-router.patch('/change-password', changePassword);
+router.use(verifyToken as any);
+router.patch('/change-password', changePassword as any);
 
 export default router;

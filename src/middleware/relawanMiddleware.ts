@@ -1,43 +1,46 @@
-//relawanMiddleware
-import { Response, NextFunction } from 'express';
-import { AuthRequest } from './authMiddleware';
-import { executeQueryWithContext } from '../../config/db';
+// backend/src/middleware/relawanMiddleware.ts
 
-export interface RelawanAuthRequest extends AuthRequest {
+import { Request, Response, NextFunction } from 'express';
+import pool from '../../config/db';
+
+export interface RelawanAuthRequest extends Request {
     relawan_id?: number;
+    user?: {
+        id: number;
+        role: string;
+    };
 }
 
-export const requireRelawanContext = async (req: RelawanAuthRequest, res: Response, next: NextFunction): Promise<void> => {
+export const requireRelawanContext = async (
+    req: RelawanAuthRequest, 
+    res: Response, 
+    next: NextFunction
+): Promise<void> => {
     try {
-        // 1. Verifikasi tipe Role
         if (!req.user || req.user.role !== 'relawan') {
-            res.status(403).json({ success: false, message: 'Akses ditolak. Fitur ini khusus untuk Relawan.' });
+            res.status(403).json({ message: 'Akses Ditolak! Hanya untuk relawan.' });
             return;
         }
 
-        // 2. Cari relawan_id di database
-        const result = await executeQueryWithContext(
-            `SELECT relawan_id FROM relawan WHERE user_id = $1 LIMIT 1`,
-            [req.user.id],
-            req.user
+        const result = await pool.query(
+            `SELECT relawan_id FROM relawan WHERE user_id = $1`,
+            [req.user.id]
         );
 
-        // Jika belum ada record di tabel relawan (misal: pendaftaran baru yang belum diisi detailnya)
         if (result.rows.length === 0) {
-            res.status(403).json({ 
-                success: false, 
-                message: 'Data biodata relawan Anda belum terdata di sistem. Silakan hubungi Admin.' 
-            });
+            res.status(403).json({ message: 'User tidak terdaftar sebagai relawan.' });
             return;
         }
 
-        // 3. Simpan ke req object
         req.relawan_id = result.rows[0].relawan_id;
-        
-        next();
 
+        // Set context untuk RLS
+        await pool.query("SET LOCAL app.current_user_id = $1;", [req.user.id]);
+        await pool.query("SET LOCAL app.current_user_role = $1;", [req.user.role]);
+
+        next();
     } catch (error: any) {
         console.error('Error in requireRelawanContext:', error);
-        res.status(500).json({ success: false, message: 'Terjadi kesalahan saat memverifikasi identitas Relawan.' });
+        res.status(500).json({ message: 'Server error' });
     }
 };

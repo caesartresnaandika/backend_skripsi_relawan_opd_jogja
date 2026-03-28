@@ -1,4 +1,3 @@
-//RelawanAdminRoutes.ts
 import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 import { 
@@ -13,29 +12,14 @@ import {
 
 const router = Router();
 
-// Semua rute ini wajib dilindungi dari akses non Super Admin
-router.use(verifyToken, authorizeRole('super_admin'));
+router.use(verifyToken as any, authorizeRole('super_admin') as any);
 
-// URL: GET http://localhost:3000/api/admin/relawan
-router.get('/', getAllRelawan);
-
-// URL: POST http://localhost:3000/api/admin/relawan
-router.post('/', createRelawan);
-
-// URL: POST http://localhost:3000/api/admin/relawan/bulk
-router.post('/bulk', createBulkRelawan);
-
-// URL: GET http://localhost:3000/api/admin/relawan/kader?opd_id=1
-router.get('/kader', getkaderByOpd);
-
-// URL: GET http://localhost:3000/api/admin/relawan/pengajuan
-// TARUH PENGAJUAN DI ATAS /:id AGAR TIDAK BENTROK DENGAN BACA PARAMETER ID
-router.get('/pengajuan', getPengajuanPerubahanDaftar);
-
-// URL: GET http://localhost:3000/api/admin/relawan/:id
-router.get('/:id', getRelawanById);
-
-// URL: POST http://localhost:3000/api/admin/relawan/pengajuan/:id/review
-router.post('/pengajuan/:id/review', reviewPengajuan);
+router.get('/', getAllRelawan as any);
+router.post('/', createRelawan as any);
+router.post('/bulk', createBulkRelawan as any);
+router.get('/kader', getkaderByOpd as any);
+router.get('/pengajuan', getPengajuanPerubahanDaftar as any);
+router.get('/:id', getRelawanById as any);
+router.post('/pengajuan/:id/review', reviewPengajuan as any);
 
 export default router;

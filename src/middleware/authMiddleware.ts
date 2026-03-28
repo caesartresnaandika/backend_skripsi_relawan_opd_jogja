@@ -8,6 +8,7 @@ import pool from '../../config/db';
 
 dotenv.config();
 
+// ✅ FIXED: Properly extend Express Request with Multer types
 export interface AuthRequest extends Request {
     user?: {
         id: number;
@@ -15,8 +16,9 @@ export interface AuthRequest extends Request {
         opd_id?: number;
         nama_opd?: string;
     };
+    // ✅ Match Multer's File type exactly
     file?: Express.Multer.File;
-    files?: Express.Multer.File[];
+    files?: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] };
 }
 
 const verifyToken = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -38,11 +40,10 @@ const verifyToken = async (req: AuthRequest, res: Response, next: NextFunction):
             nama_opd?: string;
         };
 
-        // ✅ FIXED: Set context untuk RLS (untuk semua user, bukan hanya OPD)
+        // Set context untuk RLS
         await pool.query("SET LOCAL app.current_user_id = $1;", [req.user.id]);
         await pool.query("SET LOCAL app.current_user_role = $1;", [req.user.role]);
         
-        // Set opd_id jika ada (untuk OPD user)
         if (req.user.opd_id) {
             await pool.query("SET LOCAL app.current_opd_id = $1;", [req.user.opd_id]);
         }
@@ -53,16 +54,13 @@ const verifyToken = async (req: AuthRequest, res: Response, next: NextFunction):
     }
 };
 
-// === MIDDLEWARE KHUSUS RBAC (ROLE-BASED ACCESS CONTROL) ===
 export const authorizeRole = (...allowedRoles: string[]) => {
     return (req: AuthRequest, res: Response, next: NextFunction): void => {
-        // Pastikan verifyToken sudah dijalankan sebelumnya sehingga req.user ada
         if (!req.user || !req.user.role) {
             res.status(403).json({ message: 'Akses Ditolak! Role tidak ditemukan.' });
             return;
         }
 
-        // Cek apakah role user saat ini ada di dalam daftar allowedRoles
         if (!allowedRoles.includes(req.user.role)) {
             res.status(403).json({
                 message: `Akses Ditolak! Halaman ini hanya untuk role: ${allowedRoles.join(', ')}`
@@ -70,7 +68,7 @@ export const authorizeRole = (...allowedRoles: string[]) => {
             return;
         }
 
-        next(); // Lanjut ke controller jika role sesuai
+        next();
     };
 };
 

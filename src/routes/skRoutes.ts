@@ -1,4 +1,3 @@
-//skRoutes.ts
 import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 import multer from 'multer';
@@ -14,11 +13,10 @@ import {
 
 const router = Router();
 
-// Konfigurasi Multer untuk upload file PDF
 const upload = multer({ 
     storage: multer.memoryStorage(),
     limits: {
-        fileSize: 2 * 1024 * 1024 // 2MB limit
+        fileSize: 2 * 1024 * 1024
     },
     fileFilter: (req, file, cb) => {
         if (file.mimetype === 'application/pdf') {
@@ -29,7 +27,6 @@ const upload = multer({
     }
 });
 
-// Middleware untuk handle error multer
 const handleMulterError = (err: any, req: any, res: any, next: any) => {
     if (err instanceof multer.MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') {
@@ -46,28 +43,14 @@ const handleMulterError = (err: any, req: any, res: any, next: any) => {
     next();
 };
 
-// Protect all routes - hanya super_admin dan opd yang bisa akses
-router.use(verifyToken, authorizeRole('super_admin', 'opd'));
+router.use(verifyToken as any, authorizeRole('super_admin', 'opd') as any);
 
-// URL: GET /api/admin/sk
-router.get('/', getAllSK);
-
-// URL: GET /api/admin/sk/opd-list (Dropdown OPD)
-router.get('/opd-list', getOPDList);
-
-// URL: POST /api/admin/sk (Upload PDF)
-router.post('/', upload.single('file'), handleMulterError, createSK);
-
-// URL: GET /api/admin/sk/:id
-router.get('/:id', getSKById);
-
-// URL: GET /api/admin/sk/:id/pdf
-router.get('/:id/pdf', getSKPdf);
-
-// URL: PATCH /api/admin/sk/:id/status
-router.patch('/:id/status', updateSKStatus);
-
-// URL: DELETE /api/admin/sk/:id
-router.delete('/:id', deleteSK);
+router.get('/', getAllSK as any);
+router.get('/opd-list', getOPDList as any);
+router.post('/', upload.single('file'), handleMulterError, createSK as any);
+router.get('/:id', getSKById as any);
+router.get('/:id/pdf', getSKPdf as any);
+router.patch('/:id/status', updateSKStatus as any);
+router.delete('/:id', deleteSK as any);
 
 export default router;

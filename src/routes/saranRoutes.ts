@@ -4,21 +4,8 @@ import { getAllSaran, createSaran, updateStatusBaca } from '../controllers/saran
 
 const router = Router();
 
-// =========================================================
-// Endpoint publik (butuh login, semua role bisa kirim saran)
-// =========================================================
-
-// POST /api/saran  — Kirim saran (Relawan, OPD, atau siapapun yang login)
-router.post('/', verifyToken, createSaran);
-
-// =========================================================
-// Endpoint khusus Super Admin
-// =========================================================
-
-// GET /api/saran/admin  — Lihat semua kotak masuk saran
-router.get('/admin', verifyToken, authorizeRole('super_admin'), getAllSaran);
-
-// PATCH /api/saran/admin/:id/baca  — Toggle status baca
-router.patch('/admin/:id/baca', verifyToken, authorizeRole('super_admin'), updateStatusBaca);
+router.post('/', verifyToken as any, createSaran as any);
+router.get('/admin', verifyToken as any, authorizeRole('super_admin') as any, getAllSaran as any);
+router.patch('/admin/:id/baca', verifyToken as any, authorizeRole('super_admin') as any, updateStatusBaca as any);
 
 export default router;

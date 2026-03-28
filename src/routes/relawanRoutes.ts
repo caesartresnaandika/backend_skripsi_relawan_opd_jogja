@@ -7,24 +7,12 @@ import { getMyHistory } from '../controllers/relawanHistoryController';
 
 const router = Router();
 
-// Middleware Lapis 1: Cek Token JWT dan pastikan role-nya adalah 'relawan'
-router.use(verifyToken, authorizeRole('relawan'));
+router.use(verifyToken as any, authorizeRole('relawan') as any);
+router.use(requireRelawanContext as any);
 
-// Middleware Lapis 2: Ekstrak relawan_id secara otomatis ke dalam req object
-router.use(requireRelawanContext);
-
-// ==========================================
-// Kumpulan Endpoint API Khusus Relawan
-// ==========================================
-
-// 1. Dashboard Relawan
-router.get('/dashboard', getRelawanDashboardStats);
-
-// 2. Profil Biodata
-router.get('/profile', getMyProfile);
-router.post('/profile/update', requestProfileUpdate);
-
-// 3. Riwayat / History
-router.get('/history', getMyHistory);
+router.get('/dashboard', getRelawanDashboardStats as any);
+router.get('/profile', getMyProfile as any);
+router.post('/profile/update', requestProfileUpdate as any);
+router.get('/history', getMyHistory as any);
 
 export default router;
