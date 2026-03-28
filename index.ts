@@ -49,6 +49,8 @@ app.listen(PORT, () => {
     console.log(`Server berjalan di http://localhost:${PORT}`);
 });
 
+app.use('/api/auth', authRoutes);  // ✅ Tidak ada verifyToken di sini
+
 // Handle unhandled rejections
 process.on('unhandledRejection', (reason) => {
     console.error('Unhandled Rejection:', reason);
