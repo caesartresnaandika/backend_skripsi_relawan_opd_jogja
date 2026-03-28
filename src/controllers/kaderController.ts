@@ -343,16 +343,20 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
 
 export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
-        const opdId = req.opd_id;
+        const opdId = req.opd_id; // ✨ PASTIKAN BARIS INI ADA DI SINI
+
         const result = await executeQueryWithContext(`
-            SELECT k.kader_id, k.nama_kader, k.deskripsi, k.pic, k.nik_pic, k.is_active,
+            SELECT k.kader_id, k.nama_kader, k.deskripsi, k.pic, k.nik_pic, k.is_active, 
+                   k.created_at, k.updated_at, o.nama_opd,
                    COUNT(pr.relawan_id) as jumlah_anggota
             FROM kader k
-            LEFT JOIN penugasan_relawan pr ON k.kader_id = pr.kader_id
+            JOIN opd o ON k.opd_id = o.opd_id
+            LEFT JOIN penugasan_relawan pr ON k.kader_id = pr.kader_id AND pr.status_keaktifan = 'Aktif'
             WHERE k.opd_id = $1
-            GROUP BY k.kader_id
+            GROUP BY k.kader_id, o.nama_opd
             ORDER BY k.nama_kader ASC
         `, [opdId], req.user);
+
         res.status(200).json({ success: true, data: result.rows });
     } catch (error: any) {
         console.error('Error in getKaderByOpd:', error);
@@ -460,7 +464,7 @@ export const deleteKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
 
 export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     const data = req.body;
-    const opdId = req.opd_id; // 🔒 KUNCI KEAMANAN: Paksa pakai ID instansi dari token
+    const opdId = req.opd_id;
 
     if (!Array.isArray(data) || data.length === 0) {
         res.status(400).json({ success: false, message: 'Data harus berupa array yang tidak kosong' });
@@ -473,16 +477,21 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
     const client = await pool.connect();
 
     try {
+        // ✨ FIXED: Cari tahu apa nama asli OPD yang sedang login ini
+        const opdInfo = await client.query(`SELECT nama_opd FROM opd WHERE opd_id = $1`, [opdId]);
+        const actualOpdName = opdInfo.rows[0].nama_opd.toLowerCase().replace(/[^a-z0-9]/g, '');
+
         for (let i = 0; i < data.length; i++) {
             const rawItem = data[i];
             const rowNumber = i + 1;
 
-            // Fuzzy Key Normalization
+            // ── 1. Fuzzy Key Normalization (PINDAHKAN KE ATAS!) ──
             const item: Record<string, any> = {};
             for (const key of Object.keys(rawItem)) {
                 item[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = rawItem[key];
             }
 
+            // ✅ FIXED: PINDAHKAN getVal KE SINI (sebelum dipakai)
             const getVal = (possibleKeys: string[]) => {
                 for (const key of possibleKeys) {
                     if (item[key] !== undefined) return String(item[key]);
@@ -490,10 +499,19 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
                 return '';
             };
 
+            // ── Sekarang aman pakai getVal ──
             const namaKader = getVal(['namakader', 'kader', 'nama']).trim();
-            const nikPic    = getVal(['nikpic', 'nik', 'picnik']).trim();
-            const pic       = getVal(['pic', 'namapic', 'penanggungjawab']).trim() || null;
+            const namaOpd = getVal(['opd', 'namaopd', 'instansi']).trim();
+            const namaOpdClean = namaOpd.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const nikPic = getVal(['nikpic', 'nik', 'picnik']).trim();
+            const pic = getVal(['pic', 'namapic', 'penanggungjawab']).trim() || null;
             const deskripsi = getVal(['deskripsi', 'keterangan']).trim() || null;
+
+            // ✨ FIXED: Validasi OPD
+            if (namaOpdClean && namaOpdClean !== actualOpdName) {
+                errors.push(`Baris ${rowNumber} ("${namaKader}"): Ditolak. Anda tidak diizinkan mengunggah data untuk Instansi "${namaOpd}".`);
+                continue;
+            }
 
             if (!namaKader) {
                 errors.push(`Baris ${rowNumber}: Nama Kader kosong`);
@@ -523,11 +541,10 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
                 );
                 const userId = userRes.rows[0].user_id;
 
-                // Insert kader dengan mengabaikan kolom OPD di Excel dan memaksa pakai opdId token
                 await client.query(
                     `INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id, is_active)
                      VALUES ($1, $2, $3, $4, $5, $6, true)`,
-                    [opdId, namaKader, deskripsi, pic, nikPic, userId] 
+                    [opdId, namaKader, deskripsi, pic, nikPic, userId]
                 );
 
                 await client.query('COMMIT');
