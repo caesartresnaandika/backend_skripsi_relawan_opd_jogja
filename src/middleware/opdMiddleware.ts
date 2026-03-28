@@ -25,6 +25,7 @@ export const requireOpdContext = async (
             return;
         }
 
+        // Ambil opd_id dari tabel pengelola_opd
         const result = await pool.query(
             `SELECT po.opd_id, o.nama_opd 
              FROM pengelola_opd po 
@@ -41,7 +42,7 @@ export const requireOpdContext = async (
         req.opd_id = result.rows[0].opd_id;
         req.opd_name = result.rows[0].nama_opd;
 
-        // Set context untuk RLS
+        // ✅ FIXED: Set context untuk RLS
         await pool.query("SET LOCAL app.current_opd_id = $1;", [req.opd_id]);
         await pool.query("SET LOCAL app.current_user_id = $1;", [req.user.id]);
         await pool.query("SET LOCAL app.current_user_role = $1;", [req.user.role]);

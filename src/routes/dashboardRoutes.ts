@@ -1,10 +1,14 @@
+//dashboardRoutes.ts
 import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 import { getDashboardStats } from '../controllers/dashboardController';
 
 const router = Router();
 
-router.use(verifyToken as any, authorizeRole('super_admin', 'opd') as any);
-router.get('/', getDashboardStats as any);
+// Endpoint dilindungi, khusus Super Admin
+router.use(verifyToken, authorizeRole('super_admin', 'opd'));
+
+// GET /api/admin/dashboard
+router.get('/', getDashboardStats);
 
 export default router;
