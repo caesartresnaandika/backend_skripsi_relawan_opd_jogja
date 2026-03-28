@@ -1,55 +1,39 @@
-// backend/src/middleware/opdMiddleware.ts
+//opdMiddleware
+import { Response, NextFunction } from 'express';
+import { AuthRequest } from './authMiddleware';
+import { executeQueryWithContext } from '../../config/db';
 
-import { Request, Response, NextFunction } from 'express';
-import pool from '../../config/db';
-
-export interface OpdAuthRequest extends Request {
+export interface OpdAuthRequest extends AuthRequest {
     opd_id?: number;
-    opd_name?: string;
-    user?: {
-        id: number;
-        role: string;
-        opd_id?: number;
-        nama_opd?: string;
-    };
 }
 
-export const requireOpdContext = async (
-    req: OpdAuthRequest, 
-    res: Response, 
-    next: NextFunction
-): Promise<void> => {
+export const requireOpdContext = async (req: OpdAuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
+        // Harus ada user (dari verifyToken) dan role-nya harus 'opd'
         if (!req.user || req.user.role !== 'opd') {
-            res.status(403).json({ message: 'Akses Ditolak! Hanya untuk user OPD.' });
+            res.status(403).json({ success: false, message: 'Akses ditolak. Layanan ini khusus untuk Role Admin OPD.' });
             return;
         }
 
-        // Ambil opd_id dari tabel pengelola_opd
-        const result = await pool.query(
-            `SELECT po.opd_id, o.nama_opd 
-             FROM pengelola_opd po 
-             JOIN opd o ON po.opd_id = o.opd_id 
-             WHERE po.user_id = $1`,
-            [req.user.id]
+        // Cari opd_id-nya di database based on user_id
+        const result = await executeQueryWithContext(
+            `SELECT opd_id FROM pengelola_opd WHERE user_id = $1 LIMIT 1`,
+            [req.user.id],
+            req.user
         );
 
         if (result.rows.length === 0) {
-            res.status(403).json({ message: 'User OPD tidak terasosiasi dengan OPD manapun.' });
+            res.status(403).json({ success: false, message: 'Akses ditolak. Akun Anda belum terikat ke Instansi (OPD) manapun.' });
             return;
         }
 
+        // Simpan opd_id ke request object agar controller di rute ini tidak perlu query ulang
         req.opd_id = result.rows[0].opd_id;
-        req.opd_name = result.rows[0].nama_opd;
-
-        // ✅ FIXED: Set context untuk RLS
-        await pool.query("SET LOCAL app.current_opd_id = $1;", [req.opd_id]);
-        await pool.query("SET LOCAL app.current_user_id = $1;", [req.user.id]);
-        await pool.query("SET LOCAL app.current_user_role = $1;", [req.user.role]);
-
+        
         next();
+
     } catch (error: any) {
         console.error('Error in requireOpdContext:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan saat memverifikasi identitas OPD.' });
     }
 };

@@ -1,13 +1,13 @@
-// backend/src/middleware/authMiddleware.ts
+// authMiddleware.ts
 
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { Express } from 'express';
+import { Express } from 'express';  // ✅ Import Express type
 import dotenv from 'dotenv';
-import pool from '../../config/db';
 
 dotenv.config();
 
+// ✅ Custom Type: Request yang membawa data User
 export interface AuthRequest extends Request {
     user?: {
         id: number;
@@ -15,11 +15,11 @@ export interface AuthRequest extends Request {
         opd_id?: number;
         nama_opd?: string;
     };
-    file?: Express.Multer.File;
-    files?: Express.Multer.File[];
+    file?: any;  // ✅ Untuk multer single file
+    files?: any;  // ✅ Untuk multer multiple files
 }
 
-const verifyToken = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+const verifyToken = (req: AuthRequest, res: Response, next: NextFunction): void => {
     const authHeader = req.header('Authorization');
     const token = authHeader && authHeader.split(' ')[1];
 
@@ -31,22 +31,14 @@ const verifyToken = async (req: AuthRequest, res: Response, next: NextFunction):
     try {
         const verified = jwt.verify(token, process.env.JWT_SECRET || 'rahasia_skripsi_caesar');
         
+        // ✅ FIXED: Type assertion untuk JWT payload
         req.user = verified as {
             id: number;
             role: string;
             opd_id?: number;
             nama_opd?: string;
         };
-
-        // ✅ FIXED: Set context untuk RLS (untuk semua user, bukan hanya OPD)
-        await pool.query("SET LOCAL app.current_user_id = $1;", [req.user.id]);
-        await pool.query("SET LOCAL app.current_user_role = $1;", [req.user.role]);
         
-        // Set opd_id jika ada (untuk OPD user)
-        if (req.user.opd_id) {
-            await pool.query("SET LOCAL app.current_opd_id = $1;", [req.user.opd_id]);
-        }
-
         next();
     } catch (err) {
         res.status(400).json({ message: 'Token Tidak Valid!' });
