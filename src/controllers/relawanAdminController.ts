@@ -398,13 +398,13 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                         }
                     }
 
-  // ✅ FIXED: Menggunakan assign.peran, assign.detail, assign.penugasan
+                    // ✅ FIXED: Menggunakan assign.peran, assign.detail, assign.penugasan
                     const checkPenugasan = await client.query(
                         `SELECT penugasan_id FROM penugasan_relawan 
                          WHERE relawan_id = $1 
                            AND opd_id = $2 
-                           AND kader_id IS NOT DISTINCT FROM $3 
-                           AND jabatan IS NOT DISTINCT FROM $4`,
+                           AND (kader_id = $3 OR (kader_id IS NULL AND $3 IS NULL))
+                           AND (jabatan = $4 OR (jabatan IS NULL AND $4 IS NULL))`,
                         [relawanId, opdId, kaderId, assign.peran || assign.jabatan || null]
                     );
 
