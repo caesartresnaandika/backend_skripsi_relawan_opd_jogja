@@ -34,6 +34,9 @@ router.get('/kader', getkaderByOpd);
 // TARUH PENGAJUAN DI ATAS /:id AGAR TIDAK BENTROK DENGAN BACA PARAMETER ID
 router.get('/pengajuan', getPengajuanPerubahanDaftar);
 
+router.delete('/penugasan/:penugasan_id', deletePenugasan);  // ← TAMBAH INI
+router.put('/:relawan_id', updateRelawan);     
+
 // URL: GET http://localhost:3000/api/admin/relawan/:id
 router.get('/:id', getRelawanById);
 
