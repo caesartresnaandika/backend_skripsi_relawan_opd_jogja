@@ -8,7 +8,9 @@ import {
     reviewPengajuan,
     createBulkRelawan,
     createRelawan,
-    getkaderByOpd
+    getkaderByOpd,
+    updateRelawan,
+    deletePenugasan
 } from '../controllers/relawanAdminController';
 
 const router = Router();

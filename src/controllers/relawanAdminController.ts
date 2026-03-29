@@ -497,4 +497,87 @@ export const getkaderByOpd = async (req: AuthRequest, res: Response): Promise<vo
         console.error('Error in getkaderByOpd:', error);
         res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
     }
+
+    
+};
+
+// Tambahkan di bagian bawah file (setelah getkaderByOpd)
+export const updateRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
+    const relawanId = parseInt(req.params.relawan_id as string);
+    const { nama_lengkap, alamat_ktp, kelurahan, jenis_kelamin, assignments } = req.body;
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        await client.query(
+            `UPDATE relawan SET alamat_ktp = $1, kelurahan = $2, jenis_kelamin = $3, updated_at = CURRENT_TIMESTAMP
+             WHERE relawan_id = $4`,
+            [alamat_ktp, kelurahan, jenis_kelamin, relawanId]
+        );
+        if (nama_lengkap) {
+            await client.query(
+                `UPDATE users SET nama_lengkap = $1, updated_at = CURRENT_TIMESTAMP
+                 WHERE user_id = (SELECT user_id FROM relawan WHERE relawan_id = $2)`,
+                [nama_lengkap, relawanId]
+            );
+        }
+
+        if (Array.isArray(assignments)) {
+            for (const assign of assignments) {
+                let opdId: number | null = assign.opd_id || null;
+                if (!opdId && assign.opd) {
+                    const opd = await client.query(
+                        `SELECT opd_id FROM opd WHERE LOWER(TRIM(nama_opd)) = LOWER(TRIM($1)) LIMIT 1`, [assign.opd]
+                    );
+                    if (opd.rows.length > 0) opdId = opd.rows[0].opd_id;
+                }
+
+                if (assign.penugasan_id) {
+                    await client.query(
+                        `UPDATE penugasan_relawan
+                         SET opd_id = $1, kader_id = $2, jabatan = $3, detail_jabatan = $4,
+                             status_keaktifan = $5, updated_at = CURRENT_TIMESTAMP
+                         WHERE penugasan_id = $6`,
+                        [opdId, assign.kader_id || null, assign.peran || null, assign.detail || null,
+                         assign.statusKeaktifan || 'Aktif', assign.penugasan_id]
+                    );
+                } else {
+                    await client.query(
+                        `INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, status_keaktifan)
+                         VALUES ($1, $2, $3, $4, $5, $6)`,
+                        [relawanId, opdId, assign.kader_id || null, assign.peran || null,
+                         assign.detail || null, assign.statusKeaktifan || 'Aktif']
+                    );
+                }
+            }
+        }
+
+        await client.query('COMMIT');
+        res.status(200).json({ success: true, message: 'Data relawan berhasil diperbarui' });
+    } catch (error: any) {
+        await client.query('ROLLBACK');
+        console.error('Error in updateRelawan:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
+    } finally {
+        client.release();
+    }
+};
+
+export const deletePenugasan = async (req: AuthRequest, res: Response): Promise<void> => {
+    const penugasanId = parseInt(req.params.penugasan_id as string);
+    try {
+        const result = await executeQueryWithContext(
+            `DELETE FROM penugasan_relawan WHERE penugasan_id = $1 RETURNING penugasan_id`,
+            [penugasanId], req.user
+        );
+        if (result.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Penugasan tidak ditemukan' });
+            return;
+        }
+        res.status(200).json({ success: true, message: 'Penugasan berhasil dihapus' });
+    } catch (error: any) {
+        console.error('Error in deletePenugasan:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
+    }
 };

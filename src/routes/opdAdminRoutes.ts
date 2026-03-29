@@ -10,13 +10,15 @@ import {
     createKaderByOpd,
     updateKaderByOpd,
     deleteKaderByOpd,
-    createBulkKaderByOpd // ✨ Tambahan baru
+    createBulkKaderByOpd,
 } from '../controllers/kaderController';
 import { 
     getRelawanByOpd, 
     getSkByOpd,
     createRelawanByOpd, // ✨ Tambahan baru (untuk nanti)
-    createBulkRelawanByOpd // ✨ Tambahan baru (untuk nanti)
+    createBulkRelawanByOpd,
+    updateRelawanByOpd,      
+    deletePenugasanByOpd, // ✨ Tambahan baru (untuk nanti)
 } from '../controllers/opdRelawanController';
 
 const router = Router();
@@ -40,5 +42,8 @@ router.get('/relawan', getRelawanByOpd);
 router.post('/relawan', createRelawanByOpd); // ✨ (Manual khusus OPD)
 router.post('/relawan/bulk', createBulkRelawanByOpd); // ✨ (Excel Bulk khusus OPD)
 router.get('/sk', getSkByOpd);
+router.put('/relawan/:relawan_id', updateRelawanByOpd);
+router.delete('/relawan/penugasan/:penugasan_id', deletePenugasanByOpd);
+
 
 export default router;

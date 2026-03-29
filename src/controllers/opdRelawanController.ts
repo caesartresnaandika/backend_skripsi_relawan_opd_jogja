@@ -12,20 +12,22 @@ export const getRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promi
 
         const result = await executeQueryWithContext(`
             SELECT 
-                r.relawan_id, u.nama_lengkap, u.nik, r.alamat_ktp, r.kelurahan,
-                k.nama_kader as kader, pr.status_keaktifan
+                u.user_id, u.nik, u.nama_lengkap, u.is_active,
+                r.relawan_id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
+                pr.penugasan_id, pr.jabatan, pr.detail_jabatan,
+                pr.status_keaktifan AS status_penugasan,
+                pr.opd_id, pr.kader_id,
+                o.nama_opd, k.nama_kader
             FROM penugasan_relawan pr
             JOIN relawan r ON pr.relawan_id = r.relawan_id
             JOIN users u ON r.user_id = u.user_id
+            JOIN opd o ON pr.opd_id = o.opd_id
             LEFT JOIN kader k ON pr.kader_id = k.kader_id
             WHERE pr.opd_id = $1
             ORDER BY u.nama_lengkap ASC
         `, [opdId], req.user);
 
-        res.status(200).json({
-            success: true,
-            data: result.rows
-        });
+        res.status(200).json({ success: true, data: result.rows });
     } catch (error: any) {
         console.error('Error in getRelawanByOpd:', error);
         res.status(500).json({ success: false, message: 'Server error' });
@@ -292,5 +294,95 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
         res.status(500).json({ success: false, message: 'Terjadi kesalahan sistem yang fatal.', errorDetail: fatalError.message });
     } finally {
         client.release();
+    }
+};
+
+// Tambahkan fungsi baru ini di bagian bawah file
+export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
+    const opdId = req.opd_id;
+    const relawanId = parseInt(req.params.relawan_id as string);
+    const { nama_lengkap, alamat_ktp, kelurahan, jenis_kelamin, assignments } = req.body;
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Pastikan relawan ini memang ada di OPD ini
+        const checkAccess = await client.query(
+            `SELECT pr.penugasan_id FROM penugasan_relawan pr
+             WHERE pr.relawan_id = $1 AND pr.opd_id = $2 LIMIT 1`,
+            [relawanId, opdId]
+        );
+        if (checkAccess.rows.length === 0) {
+            res.status(403).json({ success: false, message: 'Relawan ini tidak terdaftar di instansi Anda' });
+            return;
+        }
+
+        // Update profil dasar relawan
+        await client.query(
+            `UPDATE relawan SET alamat_ktp = $1, kelurahan = $2, jenis_kelamin = $3, updated_at = CURRENT_TIMESTAMP
+             WHERE relawan_id = $4`,
+            [alamat_ktp, kelurahan, jenis_kelamin, relawanId]
+        );
+        if (nama_lengkap) {
+            await client.query(
+                `UPDATE users SET nama_lengkap = $1, updated_at = CURRENT_TIMESTAMP
+                 WHERE user_id = (SELECT user_id FROM relawan WHERE relawan_id = $2)`,
+                [nama_lengkap, relawanId]
+            );
+        }
+
+        // Update penugasan — hanya yang milik OPD ini
+        if (Array.isArray(assignments)) {
+            for (const assign of assignments) {
+                if (assign.penugasan_id) {
+                    // UPDATE penugasan yang sudah ada
+                    await client.query(
+                        `UPDATE penugasan_relawan
+                         SET kader_id = $1, jabatan = $2, detail_jabatan = $3, status_keaktifan = $4, updated_at = CURRENT_TIMESTAMP
+                         WHERE penugasan_id = $5 AND opd_id = $6`,
+                        [assign.kader_id || null, assign.peran || null, assign.detail || null,
+                         assign.statusKeaktifan || 'Aktif', assign.penugasan_id, opdId]
+                    );
+                } else {
+                    // INSERT penugasan baru
+                    await client.query(
+                        `INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, status_keaktifan)
+                         VALUES ($1, $2, $3, $4, $5, $6)`,
+                        [relawanId, opdId, assign.kader_id || null, assign.peran || null,
+                         assign.detail || null, assign.statusKeaktifan || 'Aktif']
+                    );
+                }
+            }
+        }
+
+        await client.query('COMMIT');
+        res.status(200).json({ success: true, message: 'Data relawan berhasil diperbarui' });
+    } catch (error: any) {
+        await client.query('ROLLBACK');
+        console.error('Error in updateRelawanByOpd:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
+    } finally {
+        client.release();
+    }
+};
+
+// Tambahkan juga endpoint hapus penugasan khusus OPD
+export const deletePenugasanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
+    const opdId = req.opd_id;
+    const penugasanId = parseInt(req.params.penugasan_id as string);
+    try {
+        const result = await executeQueryWithContext(
+            `DELETE FROM penugasan_relawan WHERE penugasan_id = $1 AND opd_id = $2 RETURNING penugasan_id`,
+            [penugasanId, opdId], req.user
+        );
+        if (result.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Penugasan tidak ditemukan' });
+            return;
+        }
+        res.status(200).json({ success: true, message: 'Penugasan berhasil dihapus' });
+    } catch (error: any) {
+        console.error('Error in deletePenugasanByOpd:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
     }
 };
