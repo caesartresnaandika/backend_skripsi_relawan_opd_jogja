@@ -21,17 +21,18 @@ const pool = new Pool({
 export const executeQueryWithContext = async (
     queryText: string,
     params: any[] = [],
-    userContext?: { id: number; role: string }
+    userContext?: { id: number; role: string; opd_id?: number }
 ) => {
     // Pinjam 1 koneksi dari pool
     const client = await pool.connect();
     try {
         await client.query('BEGIN'); // Mulai transaksi
-
         if (userContext && userContext.id) {
-            // Gunakan set_config() alih-alih SET LOCAL karena SET LOCAL tidak mendukung parameter binding ($1)
             await client.query("SELECT set_config('app.current_user_id', $1, true);", [userContext.id.toString()]);
             await client.query("SELECT set_config('app.current_user_role', $1, true);", [userContext.role]);
+            // Tambah baris ini untuk mendukung policy opd_access_kader:
+            const opdId = (userContext as any).opd_id;
+            await client.query("SELECT set_config('app.current_opd_id', $1, true);", [(opdId ?? 0).toString()]);
         }
 
         // Eksekusi query aslinya
