@@ -1,7 +1,7 @@
 //relawanMiddleware
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from './authMiddleware';
-import pool from '../../config/db';
+import { executeQueryWithContext } from '../../config/db';
 
 export interface RelawanAuthRequest extends AuthRequest {
     relawan_id?: number;
@@ -17,11 +17,11 @@ export const requireRelawanContext = async (req: RelawanAuthRequest, res: Respon
             return;
         }
 
-        const result = await pool.query(
+        const result = await executeQueryWithContext(
             `SELECT relawan_id FROM relawan WHERE user_id = $1 LIMIT 1`,
-            [req.user.id]
+            [req.user.id],
+            req.user   // ← ini yang penting: bawa context user agar RLS tidak memblokir
         );
-
         console.log('🔍 Query result rows:', result.rows.length); // ← tambah ini
 
         if (result.rows.length === 0) {
