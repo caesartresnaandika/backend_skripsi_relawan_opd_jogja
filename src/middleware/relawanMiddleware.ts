@@ -1,7 +1,7 @@
 //relawanMiddleware
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from './authMiddleware';
-import { executeQueryWithContext } from '../../config/db';
+import pool from '../../config/db';
 
 export interface RelawanAuthRequest extends AuthRequest {
     relawan_id?: number;
@@ -17,10 +17,9 @@ export const requireRelawanContext = async (req: RelawanAuthRequest, res: Respon
             return;
         }
 
-        const result = await executeQueryWithContext(
+        const result = await pool.query(
             `SELECT relawan_id FROM relawan WHERE user_id = $1 LIMIT 1`,
-            [req.user.id],
-            req.user
+            [req.user.id]
         );
 
         console.log('🔍 Query result rows:', result.rows.length); // ← tambah ini
