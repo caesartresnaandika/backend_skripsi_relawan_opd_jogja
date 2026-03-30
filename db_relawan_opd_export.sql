@@ -7,6 +7,171 @@ CREATE TYPE public.status_pengajuan AS ENUM ('Menunggu Review', 'Diterima', 'Dit
 CREATE TYPE public.status_saran AS ENUM ('Menunggu', 'Selesai');
 CREATE TYPE public.user_role AS ENUM ('super_admin', 'opd', 'relawan');
 
+-- 1. Mengaktifkan RLS pada tabel-tabel penting
+ALTER TABLE public.opd ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.relawan ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.kegiatan_relawan ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pengajuan_perubahan_data ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.penugasan_relawan ENABLE ROW LEVEL SECURITY;
+
+-- 2. Menghapus policy lama jika ada (agar script ini aman dijalankan berulang kali)
+DROP POLICY IF EXISTS super_admin_all_opd ON public.opd;
+DROP POLICY IF EXISTS opd_relawan_select_opd ON public.opd;
+
+DROP POLICY IF EXISTS super_admin_all_relawan ON public.relawan;
+DROP POLICY IF EXISTS self_access_relawan ON public.relawan;
+
+DROP POLICY IF EXISTS super_admin_all_penugasan ON public.penugasan_relawan;
+DROP POLICY IF EXISTS self_access_penugasan ON public.penugasan_relawan;
+
+
+-- ==========================================
+-- 3. MEMBUAT POLICIES UNTUK TABEL: opd
+-- ==========================================
+-- [Super Admin]: Bebas melakukan CRUD ke tabel OPD
+CREATE POLICY super_admin_all_opd ON public.opd 
+    FOR ALL 
+    USING (current_setting('app.current_user_role', true) = 'super_admin');
+
+-- [OPD & Relawan]: Hanya boleh melihat (SELECT) tabel OPD, tidak boleh mengedit/menghapus
+CREATE POLICY opd_relawan_select_opd ON public.opd
+    FOR SELECT 
+    USING (current_setting('app.current_user_role', true) IN ('opd', 'relawan'));
+
+
+-- ==========================================
+-- 4. MEMBUAT POLICIES UNTUK TABEL: relawan
+-- ==========================================
+-- [Super Admin]: Bebas melakukan CRUD ke tabel relawan
+CREATE POLICY super_admin_all_relawan ON public.relawan 
+    FOR ALL 
+    USING (current_setting('app.current_user_role', true) = 'super_admin');
+
+-- [Relawan]: Hanya boleh melihat & mengedit profil aslinya sendiri (user_id miliknya)
+CREATE POLICY self_access_relawan ON public.relawan
+    FOR ALL
+    USING (user_id = current_setting('app.current_user_id', true)::integer);
+
+
+-- ==========================================
+-- 5. MEMBUAT POLICIES UNTUK TABEL: penugasan_relawan
+-- ==========================================
+-- [Super Admin]: Bebas akses
+CREATE POLICY super_admin_all_penugasan ON public.penugasan_relawan 
+    FOR ALL 
+    USING (current_setting('app.current_user_role', true) = 'super_admin');
+
+-- [Relawan]: Hanya boleh melihat (SELECT) penugasannya sendiri
+CREATE POLICY self_access_penugasan ON public.penugasan_relawan
+    FOR SELECT
+    USING (relawan_id IN (
+        SELECT relawan_id FROM public.relawan WHERE user_id = current_setting('app.current_user_id', true)::integer
+    ));
+
+
+-- ==========================================
+-- CATATAN PENTING UNTUK QUERY BACKEND EXPRESS.JS
+-- ==========================================
+-- Mulai sekarang, setiap kali Node.js ingin melakukan query ke database, 
+-- Node.js WAJIB mengirimkan context user terlebih dahulu. Contoh di kode Controller:
+-- 
+-- await pool.query("SET LOCAL app.current_user_id = $1;", [req.user.user_id]);
+-- await pool.query("SET LOCAL app.current_user_role = $1;", [req.user.role]);
+-- const result = await pool.query("SELECT * FROM opd");
+--
+-- RLS ini tidak mempengaruhi query yang dilakukan menggunakan user SUPERUSER postgres 
+-- jika Role 'postgres' di-set dengan opsi BYPASSRLS.
+-- Jika kamu memakai user 'postgres' di .env yang punya privileges Superuser, 
+-- kamu perlu menggunakan perintah ALTER ROLE postgres NOSUPERUSER NOBYPASSRLS agar RLS bekerja,
+-- atau buat user database baru seperti 'app_user' untuk backend kamu.
+-- ==========================================
+-- FIX RLS UNTUK TABEL: kader
+-- ==========================================
+
+-- 1. Aktifkan RLS pada tabel kader
+ALTER TABLE public.kader ENABLE ROW LEVEL SECURITY;
+
+-- 2. Hapus policy lama jika ada
+DROP POLICY IF EXISTS super_admin_all_kader ON public.kader;
+DROP POLICY IF EXISTS opd_access_kader ON public.kader;
+DROP POLICY IF EXISTS relawan_access_kader ON public.kader;
+
+-- 3. [Super Admin]: Bebas melakukan CRUD
+CREATE POLICY super_admin_all_kader ON public.kader 
+    FOR ALL 
+    USING (current_setting('app.current_user_role', true) = 'super_admin');
+
+-- 4. [OPD]: Hanya boleh akses kader dari OPD mereka sendiri
+CREATE POLICY opd_access_kader ON public.kader 
+    FOR ALL 
+    USING (
+        current_setting('app.current_user_role', true) = 'opd' 
+        AND opd_id = current_setting('app.current_opd_id', true)::integer
+    );
+
+-- 5. [Relawan]: Hanya boleh SELECT kader dari OPD mereka
+CREATE POLICY relawan_access_kader ON public.kader 
+    FOR SELECT 
+    USING (
+        current_setting('app.current_user_role', true) = 'relawan'
+        AND opd_id IN (
+            SELECT pr.opd_id 
+            FROM public.penugasan_relawan pr 
+            JOIN public.relawan r ON pr.relawan_id = r.relawan_id 
+            WHERE r.user_id = current_setting('app.current_user_id', true)::integer
+        )
+    );
+
+Membuatt aturan relawan dapat melihat data relawn di user mereka sendiri
+CREATE POLICY relawan_self_select ON relawan
+    FOR SELECT USING (true);  -- atau lebih ketat: user_id = current_user_id
+
+
+
+-- Update RLS TERBARU
+DROP POLICY IF EXISTS super_admin_all_pengajuan ON public.pengajuan_perubahan_data;
+DROP POLICY IF EXISTS relawan_own_pengajuan ON public.pengajuan_perubahan_data;
+DROP POLICY IF EXISTS opd_all_pengajuan ON public.pengajuan_perubahan_data;
+
+-- Super Admin: full access
+CREATE POLICY super_admin_all_pengajuan ON public.pengajuan_perubahan_data
+    FOR ALL
+    USING (current_setting('app.current_user_role', true) = 'super_admin');
+
+-- OPD: bisa lihat dan update semua pengajuan
+CREATE POLICY opd_all_pengajuan ON public.pengajuan_perubahan_data
+    FOR ALL
+    USING (current_setting('app.current_user_role', true) = 'opd');
+
+-- Relawan: hanya lihat pengajuan milik sendiri
+CREATE POLICY relawan_own_pengajuan ON public.pengajuan_perubahan_data
+    FOR SELECT
+    USING (
+        relawan_id IN (
+            SELECT relawan_id FROM public.relawan 
+            WHERE user_id = current_setting('app.current_user_id', true)::integer
+        )
+    );
+
+INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+SELECT 
+    u.user_id,
+    CASE 
+        WHEN u.nama_lengkap ILIKE '%siti%' 
+          OR u.nama_lengkap ILIKE '%dewi%' 
+          OR u.nama_lengkap ILIKE '%aminah%'
+          OR u.nama_lengkap ILIKE '%lestari%'
+        THEN 'P'
+        ELSE 'L'
+    END,
+    '-',
+    '-'
+FROM users u
+LEFT JOIN relawan r ON u.user_id = r.user_id
+WHERE u.role = 'relawan' 
+  AND r.relawan_id IS NULL;
+
+
 -- This script was generated by the ERD tool in pgAdmin 4.
 -- Please log an issue at https://github.com/pgadmin-org/pgadmin4/issues/new/choose if you find any bugs, including reproduction steps.
 BEGIN;

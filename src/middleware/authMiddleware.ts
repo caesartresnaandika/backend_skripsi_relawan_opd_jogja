@@ -14,6 +14,7 @@ export interface AuthRequest extends Request {
         role: string;
         opd_id?: number;
         nama_opd?: string;
+        ip?: string;
     };
     file?: any;  // ✅ Untuk multer single file
     files?: any;  // ✅ Untuk multer multiple files
@@ -32,11 +33,24 @@ const verifyToken = (req: AuthRequest, res: Response, next: NextFunction): void 
         const verified = jwt.verify(token, process.env.JWT_SECRET || 'rahasia_skripsi_caesar');
         
         // ✅ FIXED: Type assertion untuk JWT payload
-        req.user = verified as {
+        const decoded = verified as {
             id: number;
             role: string;
             opd_id?: number;
             nama_opd?: string;
+        };
+        
+        // Coba tangkap IP dari Railway proxy atau direct socket
+        let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
+        if (Array.isArray(clientIp)) {
+            clientIp = clientIp[0];
+        } else if (typeof clientIp === 'string') {
+            clientIp = clientIp.split(',')[0].trim();
+        }
+
+        req.user = {
+            ...decoded,
+            ip: clientIp as string
         };
         
         next();

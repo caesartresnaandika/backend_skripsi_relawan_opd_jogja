@@ -21,7 +21,7 @@ const pool = new Pool({
 export const executeQueryWithContext = async (
     queryText: string,
     params: any[] = [],
-    userContext?: { id: number; role: string; opd_id?: number }
+    userContext?: { id: number; role: string; opd_id?: number; ip?: string }
 ) => {
     // Pinjam 1 koneksi dari pool
     const client = await pool.connect();
@@ -33,6 +33,10 @@ export const executeQueryWithContext = async (
             // Tambah baris ini untuk mendukung policy opd_access_kader:
             const opdId = (userContext as any).opd_id;
             await client.query("SELECT set_config('app.current_opd_id', $1, true);", [(opdId ?? 0).toString()]);
+            
+            if (userContext.ip) {
+                await client.query("SELECT set_config('app.current_user_ip', $1, true);", [userContext.ip]);
+            }
         }
 
         // Eksekusi query aslinya
