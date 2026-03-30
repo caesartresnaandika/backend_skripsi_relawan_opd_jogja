@@ -9,35 +9,31 @@ export interface RelawanAuthRequest extends AuthRequest {
 
 export const requireRelawanContext = async (req: RelawanAuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        // 1. Verifikasi tipe Role
+        console.log('🔍 requireRelawanContext - user:', req.user); // ← tambah ini
+
         if (!req.user || req.user.role !== 'relawan') {
-            res.status(403).json({ success: false, message: 'Akses ditolak. Fitur ini khusus untuk Relawan.' });
+            console.log('❌ Role check failed:', req.user?.role);  // ← tambah ini
+            res.status(403).json({ success: false, message: 'Akses ditolak.' });
             return;
         }
 
-        // 2. Cari relawan_id di database
         const result = await executeQueryWithContext(
             `SELECT relawan_id FROM relawan WHERE user_id = $1 LIMIT 1`,
             [req.user.id],
             req.user
         );
 
-        // Jika belum ada record di tabel relawan (misal: pendaftaran baru yang belum diisi detailnya)
+        console.log('🔍 Query result rows:', result.rows.length); // ← tambah ini
+
         if (result.rows.length === 0) {
-            res.status(403).json({ 
-                success: false, 
-                message: 'Data biodata relawan Anda belum terdata di sistem. Silakan hubungi Admin.' 
-            });
+            res.status(403).json({ success: false, message: 'Data biodata relawan belum terdata.' });
             return;
         }
 
-        // 3. Simpan ke req object
         req.relawan_id = result.rows[0].relawan_id;
-        
         next();
-
     } catch (error: any) {
         console.error('Error in requireRelawanContext:', error);
-        res.status(500).json({ success: false, message: 'Terjadi kesalahan saat memverifikasi identitas Relawan.' });
+        res.status(500).json({ success: false, message: 'Kesalahan verifikasi identitas.' });
     }
 };
