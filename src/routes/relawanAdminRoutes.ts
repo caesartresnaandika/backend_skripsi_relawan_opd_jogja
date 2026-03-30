@@ -34,13 +34,14 @@ router.get('/kader', getkaderByOpd);
 // TARUH PENGAJUAN DI ATAS /:id AGAR TIDAK BENTROK DENGAN BACA PARAMETER ID
 router.get('/pengajuan', getPengajuanPerubahanDaftar);
 
-router.delete('/penugasan/:penugasan_id', deletePenugasan);  // ← TAMBAH INI
-router.put('/:relawan_id', updateRelawan);     
+// URL: POST http://localhost:3000/api/admin/relawan/pengajuan/:id/review
+// HARUS DI ATAS /:id AGAR TIDAK BENTROK!
+router.post('/pengajuan/:id/review', reviewPengajuan);
+
+router.delete('/penugasan/:penugasan_id', deletePenugasan);
+router.put('/:relawan_id', updateRelawan);
 
 // URL: GET http://localhost:3000/api/admin/relawan/:id
 router.get('/:id', getRelawanById);
-
-// URL: POST http://localhost:3000/api/admin/relawan/pengajuan/:id/review
-router.post('/pengajuan/:id/review', reviewPengajuan);
 
 export default router;

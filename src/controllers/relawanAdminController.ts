@@ -103,10 +103,15 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
     const { id } = req.params;
     const { status, catatan_verifikator } = req.body;
 
+    // Frontend mengirim 'Disetujui' atau 'Ditolak'
     if (!['Disetujui', 'Ditolak'].includes(status)) {
         res.status(400).json({ success: false, message: "Status harus 'Disetujui' atau 'Ditolak'" });
         return;
     }
+
+    // ✅ FIX: Map nilai frontend ke nilai ENUM database PostgreSQL
+    // DB ENUM: ('Menunggu Review', 'Diterima', 'Ditolak') - bukan 'Disetujui'!
+    const statusDB = status === 'Disetujui' ? 'Diterima' : 'Ditolak';
 
     try {
         const pengajuanQuery = `SELECT * FROM pengajuan_perubahan_data WHERE pengajuan_id = $1 AND status = 'Menunggu Review'`;
@@ -124,7 +129,8 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
             SET status = $1, catatan_verifikator = $2, tanggal_verifikasi = CURRENT_TIMESTAMP, verifikator_id = $3
             WHERE pengajuan_id = $4
         `;
-        await executeQueryWithContext(updatePengajuanQuery, [status, catatan_verifikator || null, req.user!.id, id], req.user);
+        // ✅ FIX: Gunakan statusDB ('Diterima'/'Ditolak') yang sesuai ENUM database
+        await executeQueryWithContext(updatePengajuanQuery, [statusDB, catatan_verifikator || null, req.user!.id, id], req.user);
 
         if (status === 'Disetujui' && pengajuan.data_baru) {
             // IMPLEMENTASI MENDATANG: Eksekusi update dinamis ke tabel Relawan/Users sesuai isi data_baru
@@ -132,7 +138,7 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
 
         res.status(200).json({
             success: true,
-            message: `Pengajuan berhasil di-${status}`
+            message: `Pengajuan berhasil ${status === 'Disetujui' ? 'disetujui' : 'ditolak'}`
         });
 
     } catch (error: any) {
