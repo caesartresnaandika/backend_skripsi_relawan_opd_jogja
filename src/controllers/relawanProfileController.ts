@@ -1,3 +1,4 @@
+//relawanProfileController
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { RelawanAuthRequest } from '../middleware/relawanMiddleware';
@@ -68,5 +69,26 @@ export const requestProfileUpdate = async (req: RelawanAuthRequest, res: Respons
     } catch (error: any) {
         console.error('Error in requestProfileUpdate:', error);
         res.status(500).json({ success: false, message: 'Server error saat mengirim pengajuan.' });
+    }
+};
+
+export const getMyPenugasan = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
+    try {
+        const result = await executeQueryWithContext(`
+            SELECT 
+                pr.penugasan_id, pr.jabatan, pr.detail_jabatan, 
+                pr.status_keaktifan, pr.nomor_sk_manual,
+                o.nama_opd, k.nama_kader
+            FROM penugasan_relawan pr
+            JOIN opd o ON pr.opd_id = o.opd_id
+            LEFT JOIN kader k ON pr.kader_id = k.kader_id
+            WHERE pr.relawan_id = $1
+            ORDER BY pr.created_at DESC
+        `, [req.relawan_id], req.user);
+
+        res.status(200).json({ success: true, data: result.rows });
+    } catch (error: any) {
+        console.error('Error in getMyPenugasan:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 };

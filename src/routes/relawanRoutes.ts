@@ -2,7 +2,7 @@ import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 import { requireRelawanContext } from '../middleware/relawanMiddleware';
 import { getRelawanDashboardStats } from '../controllers/relawanDashboardController';
-import { getMyProfile, requestProfileUpdate } from '../controllers/relawanProfileController';
+import { getMyProfile, requestProfileUpdate, getMyPenugasan } from '../controllers/relawanProfileController';
 import { getMyHistory } from '../controllers/relawanHistoryController';
 
 const router = Router();
@@ -26,5 +26,8 @@ router.post('/profile/update', requestProfileUpdate);
 
 // 3. Riwayat / History
 router.get('/history', getMyHistory);
+
+// 4. Penugasan
+router.get('/penugasan', getMyPenugasan);
 
 export default router;
