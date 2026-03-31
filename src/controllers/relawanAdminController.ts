@@ -172,6 +172,7 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
     const alamat_ktp = req.body.alamat_ktp || req.body.alamat;
     const kelurahan = req.body.kelurahan;
     const jenis_kelamin = req.body.jenis_kelamin || req.body.jenisKelamin || 'L';
+    const no_hp = req.body.no_hp || req.body.noHp || null;
 
     // Tangkap array assignments dari frontend
     const assignmentsToProcess: any[] = req.body.assignments && req.body.assignments.length > 0
@@ -203,9 +204,9 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
 
         // 1. INSERT users
         const userRes = await client.query(`
-            INSERT INTO users (nik, nama_lengkap, password, role, is_active)
-            VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id;
-        `, [nik, nama_lengkap, hashedPassword]);
+            INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+            VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id;
+        `, [nik, nama_lengkap, no_hp, hashedPassword]);
         const userId = userRes.rows[0].user_id;
 
         // 2. INSERT relawan
@@ -304,6 +305,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
             detailJabatan: getVal('detail_jabatan', ['detailjabatan', 'detail']).trim() || null,
             penugasan: getVal('penugasan', ['penugasan', 'tugas']).trim() || null,
             assignments: raw.assignments || null,
+            noHp: getVal('no_hp', ['nohp', 'nomorhp', 'telepon']).trim() || null,
         };
     };
 
@@ -354,9 +356,9 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     const hashedPassword = await bcrypt.hash(item.nik, salt);
 
                     const userRes = await client.query(
-                        `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
-                         VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id`,
-                        [item.nik, item.namaLengkap, hashedPassword]
+                        `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                         VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
+                        [item.nik, item.namaLengkap, item.noHp, hashedPassword]
                     );
                     userId = userRes.rows[0].user_id;
 

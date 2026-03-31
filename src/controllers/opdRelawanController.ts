@@ -68,6 +68,7 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
     const alamat_ktp = req.body.alamat_ktp || req.body.alamat;
     const kelurahan = req.body.kelurahan;
     const jenis_kelamin = req.body.jenis_kelamin || req.body.jenisKelamin || 'L';
+    const no_hp = req.body.no_hp || req.body.noHp || null;
 
     const assignment = req.body.assignments && req.body.assignments.length > 0 
         ? req.body.assignments[0] 
@@ -100,9 +101,9 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
         const hashedPassword = await bcrypt.hash(nik, salt);
 
         const userRes = await client.query(
-            `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
-             VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id;`,
-            [nik, nama_lengkap, hashedPassword]
+            `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+             VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id;`,
+            [nik, nama_lengkap, no_hp, hashedPassword]
         );
         const userId = userRes.rows[0].user_id;
 
@@ -183,6 +184,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
             const kaderName = getVal(['kader', 'komunitaskader', 'komunitas']).trim();
             const peran = getVal(['jabatan', 'peran']).trim() || null;
             const detail = getVal(['detailjabatan', 'detail']).trim() || null;
+            const noHp = getVal(['nohp', 'nomorhp', 'telepon']).trim() || null;
 
             if (!nik || !namaLengkap) {
                 errors.push(`Baris ${rowNumber} dilewati: NIK atau Nama Lengkap kosong.`);
@@ -216,9 +218,9 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                     const hashedPassword = await bcrypt.hash(nik, salt);
                     
                     const userRes = await client.query(
-                        `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
-                         VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id`,
-                        [nik, namaLengkap, hashedPassword]
+                        `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                         VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
+                        [nik, namaLengkap, noHp, hashedPassword]
                     );
                     userId = userRes.rows[0].user_id;
 
