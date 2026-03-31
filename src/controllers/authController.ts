@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// === 1. FITUR REGISTRASI (Untuk bikin user baru dengan password aman) ===
+// === 1. FITUR REGISTRASI ===
 export const register = async (req: Request, res: Response) => {
     const { nik, nama_lengkap, password, role } = req.body;
 
@@ -36,7 +36,7 @@ export const register = async (req: Request, res: Response) => {
 };
 
 
-// === 2. FITUR LOGIN (Inti Skripsi) ===
+// === 2. FITUR LOGIN ===
 export const login = async (req: Request, res: Response) => {
     const { nik, password } = req.body;
 
@@ -56,7 +56,7 @@ export const login = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Password salah!' });
         }
 
-        // ✨ 3. Penyelidikan Ekstra Khusus OPD ✨
+        // 3. Penyelidikan Ekstra Khusus OPD
         let opd_id = null;
         let nama_opd = null;
 
@@ -83,11 +83,10 @@ export const login = async (req: Request, res: Response) => {
             { 
                 id: user.user_id, 
                 role: user.role,
-                // Sisipkan juga opd_id ke dalam token agar backend selalu tahu
                 opd_id: opd_id 
             },
             process.env.JWT_SECRET || 'rahasia_skripsi_caesar', 
-            { expiresIn: '8h' } // Diperpanjang sedikit agar tidak cepat ter-logout saat demo
+            { expiresIn: '2h' }
         );
 
         // 5. Kirim Respons Lengkap ke Frontend
@@ -98,8 +97,8 @@ export const login = async (req: Request, res: Response) => {
                 nik: user.nik,
                 nama: user.nama_lengkap,
                 role: user.role,
-                opd_id: opd_id,     // Backend kini memberitahu Frontend ID instansi
-                nama_opd: nama_opd  // Backend kini memberitahu Frontend Nama instansi
+                opd_id: opd_id,     
+                nama_opd: nama_opd  
             }
         });
 
