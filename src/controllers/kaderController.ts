@@ -18,7 +18,7 @@ export const getAllKader = async (req: AuthRequest, res: Response): Promise<void
         if (opd_id) {
             query = `
                 SELECT k.kader_id, k.nama_kader, k.deskripsi, k.pic, k.nik_pic,
-                       k.opd_id, k.is_active, k.created_at, k.updated_at, o.nama_opd
+                       k.opd_id, k.is_active, k.created_at, k.updated_at, o.nama_opd,k.no_hp_pic, k.alamat_pic, k.kelurahan_pic
                 FROM kader k JOIN opd o ON k.opd_id = o.opd_id
                 WHERE k.opd_id = $1 ORDER BY k.created_at DESC;
             `;
@@ -45,7 +45,7 @@ export const getKaderById = async (req: AuthRequest, res: Response): Promise<voi
     try {
         const query = `
             SELECT k.kader_id, k.nama_kader, k.deskripsi, k.pic, k.nik_pic,
-                   k.opd_id, k.is_active, k.created_at, k.updated_at, o.nama_opd
+                   k.opd_id, k.is_active, k.created_at, k.updated_at, o.nama_opd,k.no_hp_pic, k.alamat_pic, k.kelurahan_pic
             FROM kader k JOIN opd o ON k.opd_id = o.opd_id
             WHERE k.kader_id = $1;
         `;
@@ -62,7 +62,7 @@ export const getKaderById = async (req: AuthRequest, res: Response): Promise<voi
 };
 
 export const createKader = async (req: AuthRequest, res: Response): Promise<void> => {
-    const { opd_id, nama_kader, deskripsi, pic, nik_pic } = req.body;
+    const { opd_id, nama_kader, deskripsi, pic, nik_pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
 
     if (!opd_id || !nama_kader) {
         res.status(400).json({ success: false, message: 'Field opd_id dan nama_kader wajib diisi' });
@@ -94,8 +94,8 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
         const userId = userRes.rows[0].user_id;
 
         const result = await executeQueryWithContext(
-            `INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;`,
-            [opd_id, nama_kader, deskripsi || null, pic || null, nik_pic, userId], req.user
+            `INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id, no_hp_pic, alamat_pic, kelurahan_pic) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *;`,
+            [opd_id, nama_kader, deskripsi || null, pic || null, nik_pic, userId, no_hp_pic || null, alamat_pic || null, kelurahan_pic || null], req.user
         );
 
         res.status(201).json({
@@ -114,15 +114,15 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
 
 export const updateKader = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { nama_kader, deskripsi, pic } = req.body;
+    const { nama_kader, deskripsi, pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
     if (!nama_kader) {
         res.status(400).json({ success: false, message: 'Field nama_kader wajib diisi' });
         return;
     }
     try {
         const result = await executeQueryWithContext(
-            `UPDATE kader SET nama_kader = $1, deskripsi = $2, pic = $3, updated_at = CURRENT_TIMESTAMP WHERE kader_id = $4 RETURNING *;`,
-            [nama_kader, deskripsi || null, pic || null, id], req.user
+            `UPDATE kader SET nama_kader = $1, deskripsi = $2, pic = $3, no_hp_pic = $4, alamat_pic = $5, kelurahan_pic = $6, updated_at = CURRENT_TIMESTAMP WHERE kader_id = $7 RETURNING *;`,
+            [nama_kader, deskripsi || null, pic || null, no_hp_pic || null, alamat_pic || null, kelurahan_pic || null, id], req.user
         );
         if (result.rows.length === 0) {
             res.status(404).json({ success: false, message: 'Kader tidak ditemukan' });
@@ -223,14 +223,14 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
     const errors: string[] = [];
 
     // Ambil client khusus untuk eksekusi transaksi
-    const client = await pool.connect(); 
+    const client = await pool.connect();
 
     try {
         for (let i = 0; i < data.length; i++) {
             const rawItem = data[i];
             const rowNumber = i + 1;
 
-            // ── 1. Fuzzy Key Normalization (Kebal spasi & Case Insensitive) ──
+            // ── 1. Fuzzy Key Normalization (Menangani spasi & Case Insensitive) ──
             const item: Record<string, any> = {};
             for (const key of Object.keys(rawItem)) {
                 const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -245,10 +245,13 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
             };
 
             const namaKader = getVal(['namakader', 'kader', 'nama']).trim();
-            const namaOpd   = getVal(['opd', 'namaopd', 'instansi']).trim();
-            const nikPic    = getVal(['nikpic', 'nik', 'picnik']).trim();
-            const pic       = getVal(['pic', 'namapic', 'penanggungjawab']).trim() || null;
+            const namaOpd = getVal(['opd', 'namaopd', 'instansi']).trim();
+            const nikPic = getVal(['nikpic', 'nik', 'picnik']).trim();
+            const pic = getVal(['pic', 'namapic', 'penanggungjawab']).trim() || null;
             const deskripsi = getVal(['deskripsi', 'keterangan']).trim() || null;
+            const noHpPic = getVal(['nohppic', 'nohp', 'notelp']).trim() || null;
+            const alamatPic = getVal(['alamatpic', 'alamat']).trim() || null;
+            const kelurahanPic = getVal(['kelurahanpic', 'kelurahan']).trim() || null;
 
             // ── 2. Validasi Dasar ──
             if (!namaKader) {
@@ -273,7 +276,7 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
                     `SELECT opd_id FROM opd WHERE LOWER(TRIM(nama_opd)) = LOWER(TRIM($1)) AND is_active = true LIMIT 1`,
                     [namaOpd]
                 );
-                
+
                 if (opdCheck.rows.length === 0) {
                     errors.push(`Baris ${rowNumber} ("${namaKader}"): OPD "${namaOpd}" tidak ditemukan/tidak aktif.`);
                     await client.query('ROLLBACK');
@@ -303,9 +306,9 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
 
                 // Insert kader
                 await client.query(
-                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id, is_active)
-                     VALUES ($1, $2, $3, $4, $5, $6, true)`,
-                    [opdId, namaKader, deskripsi, pic, nikPic, userId]
+                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id, is_active, no_hp_pic, alamat_pic, kelurahan_pic)
+                     VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9)`,
+                    [opdId, namaKader, deskripsi, pic, nikPic, userId, noHpPic, alamatPic, kelurahanPic]
                 );
 
                 await client.query('COMMIT'); // Simpan permanen jika sukses semua
@@ -347,7 +350,7 @@ export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise
 
         const result = await executeQueryWithContext(`
             SELECT k.kader_id, k.nama_kader, k.deskripsi, k.pic, k.nik_pic, k.is_active, 
-                   k.created_at, k.updated_at, o.nama_opd,
+                   k.created_at, k.updated_at, o.nama_opd,k.no_hp_pic, k.alamat_pic, k.kelurahan_pic,
                    COUNT(pr.relawan_id) as jumlah_anggota
             FROM kader k
             JOIN opd o ON k.opd_id = o.opd_id
@@ -367,7 +370,7 @@ export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise
 export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
         const opdId = req.opd_id;
-        const { nama_kader, deskripsi, pic, nik_pic } = req.body;
+        const { nama_kader, deskripsi, pic, nik_pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
 
         if (!nama_kader) {
             res.status(400).json({ success: false, message: 'Nama kader wajib diisi' });
@@ -398,9 +401,9 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
         const userId = userRes.rows[0].user_id;
 
         const result = await executeQueryWithContext(`
-            INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id)
-            VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
-        `, [opdId, nama_kader, deskripsi || null, pic || null, nik_pic, userId], req.user);
+            INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id, no_hp_pic, alamat_pic, kelurahan_pic)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
+        `, [opdId, nama_kader, deskripsi || null, pic || null, nik_pic, userId, no_hp_pic || null, alamat_pic || null, kelurahan_pic || null], req.user);
 
         res.status(201).json({
             success: true,
@@ -417,7 +420,7 @@ export const updateKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
     try {
         const opdId = req.opd_id;
         const kaderId = parseInt(req.params.id as string);
-        const { nama_kader, deskripsi, pic } = req.body;
+        const { nama_kader, deskripsi, pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
 
         const findQuery = await executeQueryWithContext(
             `SELECT * FROM kader WHERE kader_id = $1 AND opd_id = $2`, [kaderId, opdId], req.user
@@ -428,9 +431,9 @@ export const updateKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
         }
 
         const result = await executeQueryWithContext(`
-            UPDATE kader SET nama_kader = $1, deskripsi = $2, pic = $3, updated_at = CURRENT_TIMESTAMP
-            WHERE kader_id = $4 RETURNING *
-        `, [nama_kader, deskripsi || null, pic || null, kaderId], req.user);
+            UPDATE kader SET nama_kader = $1, deskripsi = $2, pic = $3, no_hp_pic = $4, alamat_pic = $5, kelurahan_pic = $6, updated_at = CURRENT_TIMESTAMP
+            WHERE kader_id = $7 RETURNING *
+        `, [nama_kader, deskripsi || null, pic || null, no_hp_pic || null, alamat_pic || null, kelurahan_pic || null, kaderId], req.user);
 
         res.status(200).json({ success: true, message: 'Data kader berhasil diperbarui', data: result.rows[0] });
     } catch (error: any) {
@@ -506,6 +509,9 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
             const nikPic = getVal(['nikpic', 'nik', 'picnik']).trim();
             const pic = getVal(['pic', 'namapic', 'penanggungjawab']).trim() || null;
             const deskripsi = getVal(['deskripsi', 'keterangan']).trim() || null;
+            const noHpPic = getVal(['nohppic', 'nohp', 'notelp']).trim() || null;
+            const alamatPic = getVal(['alamatpic', 'alamat']).trim() || null;
+            const kelurahanPic = getVal(['kelurahanpic', 'kelurahan']).trim() || null;
 
             // ✨ FIXED: Validasi OPD
             if (namaOpdClean && namaOpdClean !== actualOpdName) {
@@ -542,9 +548,9 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
                 const userId = userRes.rows[0].user_id;
 
                 await client.query(
-                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id, is_active)
-                     VALUES ($1, $2, $3, $4, $5, $6, true)`,
-                    [opdId, namaKader, deskripsi, pic, nikPic, userId]
+                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id, is_active, no_hp_pic, alamat_pic, kelurahan_pic)
+                     VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9)`,
+                    [opdId, namaKader, deskripsi, pic, nikPic, userId, noHpPic, alamatPic, kelurahanPic]
                 );
 
                 await client.query('COMMIT');

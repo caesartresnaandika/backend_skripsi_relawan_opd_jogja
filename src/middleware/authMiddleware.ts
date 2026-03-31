@@ -2,7 +2,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { Express } from 'express';  // ✅ Import Express type
+import { Express } from 'express';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -62,7 +62,7 @@ const verifyToken = (req: AuthRequest, res: Response, next: NextFunction): void 
 // === MIDDLEWARE KHUSUS RBAC (ROLE-BASED ACCESS CONTROL) ===
 export const authorizeRole = (...allowedRoles: string[]) => {
     return (req: AuthRequest, res: Response, next: NextFunction): void => {
-        // Pastikan verifyToken sudah dijalankan sebelumnya sehingga req.user ada
+        // Memastikan verifyToken sudah dijalankan sebelumnya sehingga req.user ada
         if (!req.user || !req.user.role) {
             res.status(403).json({ message: 'Akses Ditolak! Role tidak ditemukan.' });
             return;
