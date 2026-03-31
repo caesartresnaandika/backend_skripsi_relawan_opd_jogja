@@ -26,7 +26,7 @@ export const getAllKader = async (req: AuthRequest, res: Response): Promise<void
         } else {
             query = `
                 SELECT k.kader_id, k.nama_kader, k.deskripsi, k.pic, k.nik_pic,
-                       k.opd_id, k.is_active, k.created_at, k.updated_at, o.nama_opd
+                       k.opd_id, k.is_active, k.created_at, k.updated_at, o.nama_opd, k.no_hp_pic, k.alamat_pic, k.kelurahan_pic
                 FROM kader k JOIN opd o ON k.opd_id = o.opd_id
                 ORDER BY k.created_at DESC;
             `;
