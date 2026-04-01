@@ -1,13 +1,12 @@
+//StatistikController
 import { Request, Response } from 'express';
 import pool from '../../config/db';
 
 // Helper: set RLS context
 async function setRLSContext(client: any, userId: number, role: string, opdId?: number) {
-    await client.query(`SET LOCAL app.current_user_id = $1`, [userId]);
-    await client.query(`SET LOCAL app.current_user_role = $1`, [role]);
-    if (opdId) {
-        await client.query(`SET LOCAL app.current_opd_id = $1`, [opdId]);
-    }
+    await client.query(`SELECT set_config('app.current_user_id', $1, true)`, [userId.toString()]);
+    await client.query(`SELECT set_config('app.current_user_role', $1, true)`, [role]);
+    await client.query(`SELECT set_config('app.current_opd_id', $1, true)`, [(opdId ?? 0).toString()]);
 }
 
 // GET /api/statistik/gender
