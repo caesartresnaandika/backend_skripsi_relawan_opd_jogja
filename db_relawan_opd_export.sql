@@ -166,7 +166,6 @@ CREATE TABLE IF NOT EXISTS public.users
     password character varying(255) COLLATE pg_catalog."default" NOT NULL,
     role user_role NOT NULL,
     nama_lengkap character varying(100) COLLATE pg_catalog."default" NOT NULL,
-    email character varying(100) COLLATE pg_catalog."default",
     no_hp character varying(15) COLLATE pg_catalog."default",
     foto_profil text COLLATE pg_catalog."default",
     is_active boolean DEFAULT true,
@@ -174,7 +173,6 @@ CREATE TABLE IF NOT EXISTS public.users
     last_login timestamp with time zone,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT users_pkey PRIMARY KEY (user_id),
-    CONSTRAINT users_email_key UNIQUE (email),
     CONSTRAINT users_nik_key UNIQUE (nik)
 );
 

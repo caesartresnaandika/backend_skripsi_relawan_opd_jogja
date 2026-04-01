@@ -8,7 +8,7 @@ export const getMyProfile = async (req: RelawanAuthRequest, res: Response): Prom
     try {
         const result = await executeQueryWithContext(`
             SELECT 
-                u.nik, u.nama_lengkap, u.email, u.no_hp,
+                u.nik, u.nama_lengkap, u.no_hp,
                 r.jenis_kelamin, r.alamat_ktp, r.kelurahan
             FROM relawan r
             JOIN users u ON r.user_id = u.user_id

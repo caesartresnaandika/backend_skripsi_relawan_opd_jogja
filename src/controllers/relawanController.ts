@@ -46,7 +46,7 @@ export const getRelawanById = async (req: Request, res: Response): Promise<void>
     // Perbaikan Query JOIN: Sama seperti getAllRelawan
     const result = await pool.query(
       `SELECT 
-        r.*, u.nama_lengkap, u.no_hp, u.email,
+        r.*, u.nama_lengkap, u.no_hp,
         o.nama_opd, k.nama_kader, pr.jabatan, pr.penugasan, pr.detail_penugasan, pr.status_keaktifan
        FROM relawan r 
        JOIN users u ON r.user_id = u.user_id

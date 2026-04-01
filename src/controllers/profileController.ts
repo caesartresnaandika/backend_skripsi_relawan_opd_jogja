@@ -10,7 +10,7 @@ export const getMyProfile = async (req: AuthRequest, res: Response): Promise<voi
 
     try {
         const result = await executeQueryWithContext(
-            `SELECT user_id, nik, nama_lengkap, no_hp, email, role
+            `SELECT user_id, nik, nama_lengkap, no_hp, role
              FROM users
              WHERE user_id = $1`,
             [userId], req.user
@@ -44,7 +44,7 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
             `UPDATE users
              SET nama_lengkap = $1, no_hp = $2, updated_at = CURRENT_TIMESTAMP
              WHERE user_id = $3
-             RETURNING user_id, nik, nama_lengkap, no_hp, email, role`,
+             RETURNING user_id, nik, nama_lengkap, no_hp, role`,
             [nama_lengkap, no_hp || null, userId], req.user
         );
 
