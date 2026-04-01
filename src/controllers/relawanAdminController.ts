@@ -104,14 +104,11 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
     const { id } = req.params;
     const { status, catatan_verifikator } = req.body;
 
-    // Frontend mengirim 'Disetujui' atau 'Ditolak'
     if (!['Disetujui', 'Ditolak'].includes(status)) {
         res.status(400).json({ success: false, message: "Status harus 'Disetujui' atau 'Ditolak'" });
         return;
     }
 
-    //  FIX: Map nilai frontend ke nilai ENUM database PostgreSQL
-    // DB ENUM: ('Menunggu Review', 'Diterima', 'Ditolak') - bukan 'Disetujui'!
     const statusDB = status === 'Disetujui' ? 'Diterima' : 'Ditolak';
 
     try {
@@ -130,16 +127,13 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
             SET status = $1, catatan_verifikator = $2, tanggal_verifikasi = CURRENT_TIMESTAMP, verifikator_id = $3
             WHERE pengajuan_id = $4
         `;
-        //  FIX: Gunakan statusDB ('Diterima'/'Ditolak') yang sesuai ENUM database
         await executeQueryWithContext(updatePengajuanQuery, [statusDB, catatan_verifikator || null, req.user!.id, id], req.user);
 
         if (status === 'Disetujui' && pengajuan.data_baru) {
-            // Parsing JSON data_baru (berjaga-jaga jika format string/json)
             const dataBaru = typeof pengajuan.data_baru === 'string'
                 ? JSON.parse(pengajuan.data_baru)
                 : pengajuan.data_baru;
 
-            // Update nama jika ada perubahan
             if (dataBaru.nama_lengkap) {
                 await executeQueryWithContext(`
                     UPDATE users 
@@ -148,7 +142,6 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
                 `, [dataBaru.nama_lengkap, pengajuan.relawan_id], req.user);
             }
 
-            // Update alamat jika ada perubahan
             if (dataBaru.alamat_ktp) {
                 await executeQueryWithContext(`
                     UPDATE relawan 
@@ -157,7 +150,6 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
                 `, [dataBaru.alamat_ktp, pengajuan.relawan_id], req.user);
             }
         }
-
 
     } catch (error: any) {
         console.error('Error in reviewPengajuan:', error);
@@ -174,7 +166,6 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
     const jenis_kelamin = req.body.jenis_kelamin || req.body.jenisKelamin || 'L';
     const no_hp = req.body.no_hp || req.body.noHp || null;
 
-    // Tangkap array assignments dari frontend
     const assignmentsToProcess: any[] = req.body.assignments && req.body.assignments.length > 0
         ? req.body.assignments
         : [];
@@ -188,8 +179,10 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
 
     try {
         await client.query('BEGIN');
+        // ✅ Set RLS context for this transaction
+        await client.query(`SET LOCAL app.current_user_role = $1`, [req.user!.role]);
+        await client.query(`SET LOCAL app.current_user_id = $1`, [req.user!.id]);
 
-        // 0. Cek Duplikasi NIK (Karena ini form Relawan Baru, NIK tidak boleh sudah ada)
         const checkNikQuery = `SELECT user_id FROM users WHERE nik = $1`;
         const checkNikRes = await client.query(checkNikQuery, [nik]);
 
@@ -202,21 +195,18 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(nik, salt);
 
-        // 1. INSERT users
         const userRes = await client.query(`
             INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
             VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id;
         `, [nik, nama_lengkap, no_hp, hashedPassword]);
         const userId = userRes.rows[0].user_id;
 
-        // 2. INSERT relawan
         const relawanRes = await client.query(`
             INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
             VALUES ($1, $2, $3, $4) RETURNING relawan_id;
         `, [userId, jenis_kelamin, alamat_ktp || '-', kelurahan || '-']);
         const relawanId = relawanRes.rows[0].relawan_id;
 
-        // 3. LOOP & INSERT Penugasan
         for (const assign of assignmentsToProcess) {
             let opdId: number | null = assign.opd_id || null;
             const namaOpd: string = (assign.opd || '').trim();
@@ -268,7 +258,7 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
     }
 };
 
-// 6. Tambah Relawan Bulk (dari Excel & Form Manual) - FIXED VERSION
+// 6. Tambah / Update Relawan Bulk (dari Excel) — FIXED: RLS context di-set per transaksi
 export const createBulkRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
     const rawData = req.body;
 
@@ -277,7 +267,6 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
         return;
     }
 
-    // ── Helper: Normalisasi menangkap format Excel & format Axios Frontend ──────
     const normalizeItem = (raw: any) => {
         const cleanExcelData: Record<string, any> = {};
         for (const key of Object.keys(raw)) {
@@ -319,7 +308,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
         for (let i = 0; i < rawData.length; i++) {
             const rawItem = rawData[i];
             const item = normalizeItem(rawItem);
-            const rowNumber = i + 2; // Excel row number (header = row 1)
+            const rowNumber = i + 2;
 
             if (!item.nik || !item.namaLengkap) {
                 errors.push(`Baris ${rowNumber} dilewati: NIK atau Nama Lengkap kosong.`);
@@ -329,32 +318,38 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
             try {
                 await client.query('BEGIN');
 
+                // ✅ FIX: Set RLS context agar UPDATE ke tabel relawan & penugasan_relawan
+                //         tidak diblokir oleh Row Level Security.
+                //         Tanpa ini, UPDATE relawan akan gagal → ROLLBACK seluruh transaksi
+                //         termasuk UPDATE users, sehingga nama_lengkap tidak pernah tersimpan.
+                await client.query(`SET LOCAL app.current_user_role = $1`, [req.user!.role]);
+                await client.query(`SET LOCAL app.current_user_id = $1`, [req.user!.id]);
+
                 let userId: number;
                 let relawanId: number;
 
-                // Cek apakah NIK sudah ada
                 const checkRes = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [item.nik]);
 
                 if (checkRes.rows.length > 0) {
-                    // NIK sudah ada - UPDATE data profil yang berubah
+                    // ── NIK sudah ada → UPDATE profil ────────────────────────────────────
                     userId = checkRes.rows[0].user_id;
 
-                    // Update data di tabel users (nama & no_hp)
                     await client.query(
                         `UPDATE users
                          SET nama_lengkap = $1,
-                             no_hp        = COALESCE($2, no_hp),
+                             no_hp        = COALESCE(NULLIF($2, ''), no_hp),
                              updated_at   = CURRENT_TIMESTAMP
                          WHERE user_id = $3`,
                         [item.namaLengkap, item.noHp || null, userId]
                     );
 
-                    const getRelawan = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
+                    const getRelawan = await client.query(
+                        `SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]
+                    );
 
                     if (getRelawan.rows.length > 0) {
                         relawanId = getRelawan.rows[0].relawan_id;
 
-                        // Update data di tabel relawan (alamat, kelurahan, jenis kelamin)
                         await client.query(
                             `UPDATE relawan
                              SET jenis_kelamin = $1,
@@ -366,16 +361,16 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                         );
                         updatedProfileCount++;
                     } else {
-                        // User ada tapi profil relawan tidak ada - buat profil relawan baru
                         const relawanRes = await client.query(
                             `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
                              VALUES ($1, $2, $3, $4) RETURNING relawan_id`,
                             [userId, item.jenisKelamin, item.alamat, item.kelurahan]
                         );
                         relawanId = relawanRes.rows[0].relawan_id;
+                        updatedProfileCount++;
                     }
                 } else {
-                    // NIK baru - Buat User dan Relawan baru
+                    // ── NIK baru → INSERT user + relawan ────────────────────────────────
                     const salt = await bcrypt.genSalt(10);
                     const hashedPassword = await bcrypt.hash(item.nik, salt);
 
@@ -394,7 +389,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     relawanId = relawanRes.rows[0].relawan_id;
                 }
 
-                // Setup Penugasan
+                // ── Setup Penugasan ──────────────────────────────────────────────────────
                 const assignmentsToProcess: any[] = item.assignments && item.assignments.length > 0
                     ? item.assignments
                     : [{
@@ -410,7 +405,6 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     let opdId: number | null = assign.opd_id || null;
                     const namaOpd: string = (assign.opd || '').trim();
 
-                    // Cari OPD ID jika belum ada
                     if (!opdId && namaOpd && namaOpd !== '-') {
                         const opdLookup = await client.query(
                             `SELECT opd_id FROM opd WHERE LOWER(TRIM(nama_opd)) = LOWER(TRIM($1)) LIMIT 1`,
@@ -420,11 +414,12 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     }
 
                     if (!opdId) {
-                        errors.push(`Baris ${rowNumber} (NIK ${item.nik}): OPD "${namaOpd}" tidak ditemukan. Data relawan tersimpan, tapi tanpa penugasan.`);
+                        if (namaOpd) {
+                            errors.push(`Baris ${rowNumber} (NIK ${item.nik}): OPD "${namaOpd}" tidak ditemukan. Data relawan tersimpan, tapi tanpa penugasan.`);
+                        }
                         continue;
                     }
 
-                    // Cari Kader ID
                     let kaderId: number | null = assign.kader_id || null;
                     const namaKader: string = (assign.kader || '').trim();
 
@@ -442,13 +437,10 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                                 WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) LIMIT 1`,
                                 [namaKader]
                             );
-                            if (kaderFallback.rows.length > 0) {
-                                kaderId = kaderFallback.rows[0].kader_id;
-                            }
+                            if (kaderFallback.rows.length > 0) kaderId = kaderFallback.rows[0].kader_id;
                         }
                     }
 
-                    //  FIXED: Menggunakan assign.peran, assign.detail, assign.penugasan
                     const checkPenugasan = await client.query(
                         `SELECT penugasan_id FROM penugasan_relawan 
                          WHERE relawan_id = $1 
@@ -459,13 +451,12 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     );
 
                     if (checkPenugasan.rows.length > 0) {
-                        // UPDATE existing penugasan
                         await client.query(
                             `UPDATE penugasan_relawan
-                             SET detail_jabatan = $1,
-                                 penugasan = $2,
+                             SET detail_jabatan   = $1,
+                                 penugasan        = $2,
                                  status_keaktifan = $3,
-                                 updated_at = CURRENT_TIMESTAMP
+                                 updated_at       = CURRENT_TIMESTAMP
                              WHERE penugasan_id = $4`,
                             [
                                 assign.detail || assign.detailJabatan || null,
@@ -476,7 +467,6 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                         );
                         updatedCount++;
                     } else {
-                        // INSERT new penugasan
                         await client.query(
                             `INSERT INTO penugasan_relawan
                                 (relawan_id, opd_id, kader_id, jabatan, penugasan, detail_jabatan, status_keaktifan)
@@ -530,7 +520,6 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
     }
 };
 
-
 // 7. Dapatkan daftar kader berdasarkan opd_id (untuk dropdown di form)
 export const getkaderByOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     const { opd_id } = req.query;
@@ -552,11 +541,8 @@ export const getkaderByOpd = async (req: AuthRequest, res: Response): Promise<vo
         console.error('Error in getkaderByOpd:', error);
         res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
     }
-
-
 };
 
-// Tambahkan di bagian bawah file (setelah getkaderByOpd)
 export const updateRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
     const relawanId = parseInt(req.params.relawan_id as string);
     const { nama_lengkap, alamat_ktp, kelurahan, jenis_kelamin, assignments } = req.body;
@@ -564,6 +550,9 @@ export const updateRelawan = async (req: AuthRequest, res: Response): Promise<vo
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+        // ✅ Set RLS context
+        await client.query(`SET LOCAL app.current_user_role = $1`, [req.user!.role]);
+        await client.query(`SET LOCAL app.current_user_id = $1`, [req.user!.id]);
 
         await client.query(
             `UPDATE relawan SET alamat_ktp = $1, kelurahan = $2, jenis_kelamin = $3, updated_at = CURRENT_TIMESTAMP
