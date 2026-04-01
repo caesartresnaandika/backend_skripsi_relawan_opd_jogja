@@ -249,17 +249,17 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
             return '';
         };
         return {
-            nik:           get('nik',           ['nik']).trim(),
-            namaLengkap:   get('nama_lengkap',  ['namalengkap','nama']).trim(),
-            jenisKelamin:  get('jenis_kelamin', ['jeniskelamin','jk','kelamin']).trim().toUpperCase() === 'P' ? 'P' : 'L',
-            alamat:        get('alamat_ktp',    ['alamatktp','alamat','domisili']).trim() || '-',
-            kelurahan:     get('kelurahan',     ['kelurahan','desa']).trim() || '-',
-            opd:           get('opd',           ['opd','instansi','opdinstansi']).trim(), // Fix pembacaan OPD
-            kader:         get('kader',         ['kader','komunitaskader','komunitas']).trim(),
-            jabatan:       get('jabatan',       ['jabatan','peran','jabatanperan']).trim() || null, // Fix pembacaan Jabatan
-            detailJabatan: get('detail_jabatan',['detailjabatan','detail']).trim() || null,
-            penugasan:     get('penugasan',     ['penugasan','tugas']).trim() || null,
-            noHp:          get('no_hp',         ['nohp','nomorhp','telepon']).trim() || null,
+            nik:           get('nik',           ['nik', 'nomorindukkependudukan']).trim(),
+            namaLengkap:   get('nama_lengkap',  ['namalengkap', 'nama', 'namarelawan']).trim(),
+            jenisKelamin:  get('jenis_kelamin', ['jeniskelamin', 'jk', 'kelamin']).trim().toUpperCase() === 'P' ? 'P' : 'L',
+            alamat:        get('alamat_ktp',    ['alamatktp', 'alamat', 'domisili']).trim() || '-',
+            kelurahan:     get('kelurahan',     ['kelurahan', 'desa']).trim() || '-',
+            opd:           get('opd',           ['opd', 'instansi', 'opdinstansi']).trim(),
+            kader:         get('kader',         ['kader', 'komunitaskader', 'komunitas']).trim(),
+            jabatan:       get('jabatan',       ['jabatan', 'peran', 'jabatanperan']).trim() || null,
+            detailJabatan: get('detail_jabatan',['detailjabatan', 'detail']).trim() || null,
+            penugasan:     get('penugasan',     ['penugasan', 'tugas']).trim() || null,
+            noHp:          get('no_hp',         ['nohp', 'nomorhp', 'telepon']).trim() || null,
             assignments:   raw.assignments || null,
         };
     };
@@ -271,10 +271,10 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
     try {
         for (let i = 0; i < rawData.length; i++) {
             const item = normalizeItem(rawData[i]);
-            const rowNumber = i + 2; // +2 jika mempertimbangkan header Excel
+            const rowNumber = i + 2;
 
             if (!item.nik || !item.namaLengkap) {
-                errors.push(`Baris ${rowNumber} dilewati: NIK atau Nama kosong.`);
+                errors.push(`Baris ${rowNumber} dilewati: NIK atau Nama kosong/tidak terbaca.`);
                 continue;
             }
 
@@ -290,13 +290,19 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                 if (checkRes.rows.length > 0) {
                     // ── NIK sudah ada → UPDATE profil ──────────────────────────
                     userId = checkRes.rows[0].user_id;
-                    await client.query(`
+                    
+                    const updateU = await client.query(`
                         UPDATE users
                         SET nama_lengkap = $1,
                             no_hp        = COALESCE(NULLIF($2, ''), no_hp),
                             updated_at   = CURRENT_TIMESTAMP
                         WHERE user_id = $3
+                        RETURNING user_id
                     `, [item.namaLengkap, item.noHp, userId]);
+
+                    if (updateU.rowCount === 0) {
+                        errors.push(`Baris ${rowNumber}: Nama '${item.namaLengkap}' gagal tersimpan (dibatasi hak akses/RLS).`);
+                    }
 
                     const relawanCheck = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
                     if (relawanCheck.rows.length > 0) {
@@ -330,7 +336,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     relawanId = rRes.rows[0].relawan_id;
                 }
 
-                // ── UPDATE / INSERT Penugasan ──────────────────────────────────
+                // ── Proses Penugasan ───────────────────────────────────────────
                 const assignmentsToProcess: any[] = item.assignments?.length > 0
                     ? item.assignments
                     : [{ opd: item.opd, kader: item.kader, peran: item.jabatan, detail: item.detailJabatan, penugasan: item.penugasan, statusKeaktifan: 'Aktif' }];
@@ -359,8 +365,6 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     }
 
                     const jabatan = assign.peran || assign.jabatan || null;
-                    
-                    // Cek berdasarkan relawan_id dan opd_id untuk melakukan penumpukan / update
                     const checkP = await client.query(`
                         SELECT penugasan_id FROM penugasan_relawan
                         WHERE relawan_id = $1 AND opd_id = $2
@@ -386,8 +390,8 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                 await client.query('COMMIT');
             } catch (rowError: any) {
                 await client.query('ROLLBACK');
-                console.error(`Error row ${rowNumber}:`, rowError);
-                errors.push(`Baris ${rowNumber} gagal: ${rowError.message}`);
+                console.error(`Error row ${rowNumber} (${item.namaLengkap}):`, rowError);
+                errors.push(`Baris ${rowNumber} gagal diproses: ${rowError.message}`);
             }
         }
 

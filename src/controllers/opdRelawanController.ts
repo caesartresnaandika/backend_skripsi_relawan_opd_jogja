@@ -154,9 +154,9 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
     try {
         for (let i = 0; i < rawData.length; i++) {
             const rawItem = rawData[i];
-            const rowNumber = i + 1; // atau i + 2 jika header di baris 1
+            const rowNumber = i + 2; // +2 mengasumsikan baris 1 adalah header Excel
 
-            // Normalisasi key dari format Excel
+            // Normalisasi key dari format Excel menjadi huruf kecil tanpa spasi
             const flat: Record<string, any> = {};
             for (const key of Object.keys(rawItem)) flat[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = rawItem[key];
             const get = (keys: string[]): string => {
@@ -164,19 +164,20 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                 return '';
             };
 
-            const nik          = get(['nik']).trim();
-            const namaLengkap  = get(['namalengkap','nama']).trim();
-            const jenisKelamin = get(['jeniskelamin','jk','kelamin']).trim().toUpperCase() === 'P' ? 'P' : 'L';
-            const alamat       = get(['alamatktp','alamat','domisili']).trim() || '-';
-            const kelurahan    = get(['kelurahan','desa']).trim() || '-';
-            const kaderName    = get(['kader','komunitaskader','komunitas']).trim();
-            const peran        = get(['jabatan','peran','jabatanperan']).trim() || null; // Fix pembacaan
-            const detail       = get(['detailjabatan','detail']).trim() || null;
-            const penugasanText = get(['penugasan','tugas']).trim() || null;
-            const noHp         = get(['nohp','nomorhp','telepon']).trim() || null;
+            const nik          = get(['nik', 'nomorindukkependudukan']).trim();
+            // Perluasan deteksi nama jaga-jaga format excel berubah
+            const namaLengkap  = get(['namalengkap', 'nama', 'namarelawan']).trim(); 
+            const jenisKelamin = get(['jeniskelamin', 'jk', 'kelamin']).trim().toUpperCase() === 'P' ? 'P' : 'L';
+            const alamat       = get(['alamatktp', 'alamat', 'domisili']).trim() || '-';
+            const kelurahan    = get(['kelurahan', 'desa']).trim() || '-';
+            const kaderName    = get(['kader', 'komunitaskader', 'komunitas']).trim();
+            const peran        = get(['jabatan', 'peran', 'jabatanperan']).trim() || null;
+            const detail       = get(['detailjabatan', 'detail']).trim() || null;
+            const penugasanText = get(['penugasan', 'tugas']).trim() || null;
+            const noHp         = get(['nohp', 'nomorhp', 'telepon']).trim() || null;
 
             if (!nik || !namaLengkap) {
-                errors.push(`Baris ${rowNumber} dilewati: NIK atau Nama kosong.`);
+                errors.push(`Baris ${rowNumber} dilewati: NIK atau Nama kosong/tidak terbaca.`);
                 continue;
             }
 
@@ -190,15 +191,22 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                 const checkRes = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nik]);
 
                 if (checkRes.rows.length > 0) {
-                    // ── NIK sudah ada → UPDATE profil users & relawan ────────────────
+                    // ── NIK sudah ada → UPDATE profil ──────────────────────────
                     userId = checkRes.rows[0].user_id;
-                    await client.query(`
+                    
+                    // Eksekusi UPDATE Users dan deteksi Silent Failure
+                    const updateU = await client.query(`
                         UPDATE users
                         SET nama_lengkap = $1,
                             no_hp        = COALESCE(NULLIF($2, ''), no_hp),
                             updated_at   = CURRENT_TIMESTAMP
                         WHERE user_id = $3
+                        RETURNING user_id
                     `, [namaLengkap, noHp, userId]);
+
+                    if (updateU.rowCount === 0) {
+                        errors.push(`Baris ${rowNumber}: Nama '${namaLengkap}' gagal tersimpan (dibatasi hak akses/RLS).`);
+                    }
 
                     const relawanCheck = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
                     if (relawanCheck.rows.length > 0) {
@@ -232,14 +240,13 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                     relawanId = rRes.rows[0].relawan_id;
                 }
 
-                // ── UPDATE / INSERT Penugasan (khusus OPD ini) ─────────────────────
+                // ── Penugasan (khusus OPD ini) ─────────────────────────────────
                 let kaderId: number | null = null;
                 if (kaderName && kaderName !== '-') {
                     const r = await client.query(`SELECT kader_id FROM kader WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) AND opd_id = $2 LIMIT 1`, [kaderName, opdId]);
                     if (r.rows.length > 0) kaderId = r.rows[0].kader_id;
                 }
 
-                // Cek penugasan berdasarkan relawan_id dan opd_id saja (agar benar-benar mengupdate tugas di instansi tersebut)
                 const checkP = await client.query(`
                     SELECT penugasan_id FROM penugasan_relawan
                     WHERE relawan_id = $1 AND opd_id = $2
@@ -264,13 +271,13 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                 await client.query('COMMIT');
             } catch (rowError: any) {
                 await client.query('ROLLBACK');
-                console.error(`Error row ${rowNumber}:`, rowError);
-                errors.push(`Baris ${rowNumber} gagal: ${rowError.message}`);
+                console.error(`Error row ${rowNumber} (${namaLengkap}):`, rowError);
+                errors.push(`Baris ${rowNumber} gagal diproses: ${rowError.message}`);
             }
         }
 
         const parts: string[] = [];
-        if (insertedCount > 0)       parts.push(`${insertedCount} penugasan baru ditambahkan.`);
+        if (insertedCount > 0)       parts.push(`${insertedCount} relawan baru ditambahkan.`);
         if (updatedProfileCount > 0) parts.push(`${updatedProfileCount} profil diperbarui.`);
         if (updatedCount > 0)        parts.push(`${updatedCount} penugasan diperbarui.`);
         if (errors.length > 0)       parts.push(`${errors.length} peringatan.`);
