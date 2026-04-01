@@ -1,3 +1,4 @@
+//relawanAdminController
 import pool from '../../config/db';
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
@@ -253,9 +254,9 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
             jenisKelamin:  get('jenis_kelamin', ['jeniskelamin','jk','kelamin']).trim().toUpperCase() === 'P' ? 'P' : 'L',
             alamat:        get('alamat_ktp',    ['alamatktp','alamat','domisili']).trim() || '-',
             kelurahan:     get('kelurahan',     ['kelurahan','desa']).trim() || '-',
-            opd:           get('opd',           ['opd','instansi']).trim(),
+            opd:           get('opd',           ['opd','instansi','opdinstansi']).trim(), // Fix pembacaan OPD
             kader:         get('kader',         ['kader','komunitaskader','komunitas']).trim(),
-            jabatan:       get('jabatan',       ['jabatan','peran']).trim() || null,
+            jabatan:       get('jabatan',       ['jabatan','peran','jabatanperan']).trim() || null, // Fix pembacaan Jabatan
             detailJabatan: get('detail_jabatan',['detailjabatan','detail']).trim() || null,
             penugasan:     get('penugasan',     ['penugasan','tugas']).trim() || null,
             noHp:          get('no_hp',         ['nohp','nomorhp','telepon']).trim() || null,
@@ -270,7 +271,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
     try {
         for (let i = 0; i < rawData.length; i++) {
             const item = normalizeItem(rawData[i]);
-            const rowNumber = i + 2;
+            const rowNumber = i + 2; // +2 jika mempertimbangkan header Excel
 
             if (!item.nik || !item.namaLengkap) {
                 errors.push(`Baris ${rowNumber} dilewati: NIK atau Nama kosong.`);
@@ -279,10 +280,6 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
 
             try {
                 await client.query('BEGIN');
-                // ↓ KUNCI FIX: set RLS context di tiap transaksi.
-                // Tanpa ini, query pada tabel ber-RLS (penugasan_relawan, relawan, dll)
-                // akan di-block policy dan menyebabkan error → ROLLBACK seluruh transaksi
-                // termasuk UPDATE users yang sudah benar.
                 await setClientContext(client, req.user!);
 
                 let userId: number;
@@ -333,7 +330,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     relawanId = rRes.rows[0].relawan_id;
                 }
 
-                // ── Proses Penugasan ───────────────────────────────────────────
+                // ── UPDATE / INSERT Penugasan ──────────────────────────────────
                 const assignmentsToProcess: any[] = item.assignments?.length > 0
                     ? item.assignments
                     : [{ opd: item.opd, kader: item.kader, peran: item.jabatan, detail: item.detailJabatan, penugasan: item.penugasan, statusKeaktifan: 'Aktif' }];
@@ -362,19 +359,20 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     }
 
                     const jabatan = assign.peran || assign.jabatan || null;
+                    
+                    // Cek berdasarkan relawan_id dan opd_id untuk melakukan penumpukan / update
                     const checkP = await client.query(`
                         SELECT penugasan_id FROM penugasan_relawan
                         WHERE relawan_id = $1 AND opd_id = $2
-                          AND (kader_id = $3 OR (kader_id IS NULL AND $3 IS NULL))
-                          AND (jabatan   = $4 OR (jabatan   IS NULL AND $4 IS NULL))
-                    `, [relawanId, opdId, kaderId, jabatan]);
+                        LIMIT 1
+                    `, [relawanId, opdId]);
 
                     if (checkP.rows.length > 0) {
                         await client.query(`
                             UPDATE penugasan_relawan
-                            SET detail_jabatan = $1, penugasan = $2, status_keaktifan = $3, updated_at = CURRENT_TIMESTAMP
-                            WHERE penugasan_id = $4
-                        `, [assign.detail || assign.detailJabatan || null, assign.penugasan || namaOpd || null, assign.statusKeaktifan || 'Aktif', checkP.rows[0].penugasan_id]);
+                            SET kader_id = $1, jabatan = $2, detail_jabatan = $3, penugasan = $4, status_keaktifan = $5, updated_at = CURRENT_TIMESTAMP
+                            WHERE penugasan_id = $6
+                        `, [kaderId, jabatan, assign.detail || assign.detailJabatan || null, assign.penugasan || namaOpd || null, assign.statusKeaktifan || 'Aktif', checkP.rows[0].penugasan_id]);
                         updatedCount++;
                     } else {
                         await client.query(`
@@ -394,7 +392,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
         }
 
         const parts: string[] = [];
-        if (insertedCount > 0)       parts.push(`${insertedCount} relawan baru ditambahkan.`);
+        if (insertedCount > 0)       parts.push(`${insertedCount} penugasan baru ditambahkan.`);
         if (updatedProfileCount > 0) parts.push(`${updatedProfileCount} profil diperbarui.`);
         if (updatedCount > 0)        parts.push(`${updatedCount} penugasan diperbarui.`);
         if (errors.length > 0)       parts.push(`${errors.length} peringatan.`);

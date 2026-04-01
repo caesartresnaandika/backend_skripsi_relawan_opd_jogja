@@ -1,3 +1,4 @@
+//opRelawanController.ts
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { OpdAuthRequest } from '../middleware/opdMiddleware';
@@ -153,7 +154,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
     try {
         for (let i = 0; i < rawData.length; i++) {
             const rawItem = rawData[i];
-            const rowNumber = i + 1;
+            const rowNumber = i + 1; // atau i + 2 jika header di baris 1
 
             // Normalisasi key dari format Excel
             const flat: Record<string, any> = {};
@@ -163,15 +164,16 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                 return '';
             };
 
-            const nik         = get(['nik']).trim();
-            const namaLengkap = get(['namalengkap','nama']).trim();
+            const nik          = get(['nik']).trim();
+            const namaLengkap  = get(['namalengkap','nama']).trim();
             const jenisKelamin = get(['jeniskelamin','jk','kelamin']).trim().toUpperCase() === 'P' ? 'P' : 'L';
-            const alamat      = get(['alamatktp','alamat','domisili']).trim() || '-';
-            const kelurahan   = get(['kelurahan','desa']).trim() || '-';
-            const kaderName   = get(['kader','komunitaskader','komunitas']).trim();
-            const peran       = get(['jabatan','peran']).trim() || null;
-            const detail      = get(['detailjabatan','detail']).trim() || null;
-            const noHp        = get(['nohp','nomorhp','telepon']).trim() || null;
+            const alamat       = get(['alamatktp','alamat','domisili']).trim() || '-';
+            const kelurahan    = get(['kelurahan','desa']).trim() || '-';
+            const kaderName    = get(['kader','komunitaskader','komunitas']).trim();
+            const peran        = get(['jabatan','peran','jabatanperan']).trim() || null; // Fix pembacaan
+            const detail       = get(['detailjabatan','detail']).trim() || null;
+            const penugasanText = get(['penugasan','tugas']).trim() || null;
+            const noHp         = get(['nohp','nomorhp','telepon']).trim() || null;
 
             if (!nik || !namaLengkap) {
                 errors.push(`Baris ${rowNumber} dilewati: NIK atau Nama kosong.`);
@@ -180,10 +182,6 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
 
             try {
                 await client.query('BEGIN');
-                // ↓ KUNCI FIX: set RLS context di tiap transaksi.
-                // Tanpa ini, query pada tabel ber-RLS (penugasan_relawan, relawan, dll)
-                // akan di-block policy dan menyebabkan error → ROLLBACK seluruh transaksi
-                // termasuk UPDATE users yang sudah benar.
                 await setClientContext(client, req.user!, opdId);
 
                 let userId: number;
@@ -192,7 +190,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                 const checkRes = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nik]);
 
                 if (checkRes.rows.length > 0) {
-                    // ── NIK sudah ada → UPDATE profil ──────────────────────────
+                    // ── NIK sudah ada → UPDATE profil users & relawan ────────────────
                     userId = checkRes.rows[0].user_id;
                     await client.query(`
                         UPDATE users
@@ -234,32 +232,32 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                     relawanId = rRes.rows[0].relawan_id;
                 }
 
-                // ── Penugasan (khusus OPD ini) ─────────────────────────────────
+                // ── UPDATE / INSERT Penugasan (khusus OPD ini) ─────────────────────
                 let kaderId: number | null = null;
                 if (kaderName && kaderName !== '-') {
                     const r = await client.query(`SELECT kader_id FROM kader WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) AND opd_id = $2 LIMIT 1`, [kaderName, opdId]);
                     if (r.rows.length > 0) kaderId = r.rows[0].kader_id;
                 }
 
+                // Cek penugasan berdasarkan relawan_id dan opd_id saja (agar benar-benar mengupdate tugas di instansi tersebut)
                 const checkP = await client.query(`
                     SELECT penugasan_id FROM penugasan_relawan
                     WHERE relawan_id = $1 AND opd_id = $2
-                      AND kader_id IS NOT DISTINCT FROM $3
-                      AND jabatan   IS NOT DISTINCT FROM $4
-                `, [relawanId, opdId, kaderId, peran]);
+                    LIMIT 1
+                `, [relawanId, opdId]);
 
                 if (checkP.rows.length > 0) {
                     await client.query(`
                         UPDATE penugasan_relawan
-                        SET detail_jabatan = $1, status_keaktifan = $2, updated_at = CURRENT_TIMESTAMP
-                        WHERE penugasan_id = $3
-                    `, [detail, 'Aktif', checkP.rows[0].penugasan_id]);
+                        SET kader_id = $1, jabatan = $2, detail_jabatan = $3, penugasan = $4, status_keaktifan = $5, updated_at = CURRENT_TIMESTAMP
+                        WHERE penugasan_id = $6
+                    `, [kaderId, peran, detail, penugasanText, 'Aktif', checkP.rows[0].penugasan_id]);
                     updatedCount++;
                 } else {
                     await client.query(`
-                        INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, status_keaktifan)
-                        VALUES ($1,$2,$3,$4,$5,'Aktif')
-                    `, [relawanId, opdId, kaderId, peran, detail]);
+                        INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, penugasan, status_keaktifan)
+                        VALUES ($1,$2,$3,$4,$5,$6,'Aktif')
+                    `, [relawanId, opdId, kaderId, peran, detail, penugasanText]);
                     insertedCount++;
                 }
 
@@ -272,7 +270,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
         }
 
         const parts: string[] = [];
-        if (insertedCount > 0)       parts.push(`${insertedCount} relawan baru ditambahkan.`);
+        if (insertedCount > 0)       parts.push(`${insertedCount} penugasan baru ditambahkan.`);
         if (updatedProfileCount > 0) parts.push(`${updatedProfileCount} profil diperbarui.`);
         if (updatedCount > 0)        parts.push(`${updatedCount} penugasan diperbarui.`);
         if (errors.length > 0)       parts.push(`${errors.length} peringatan.`);
