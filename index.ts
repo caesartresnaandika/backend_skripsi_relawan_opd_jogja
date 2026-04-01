@@ -16,6 +16,7 @@ import debugRoutes from './src/routes/debugRoutes';
 import saranRoutes from './src/routes/saranRoutes';
 import kaderRoutes from './src/routes/kaderRoutes';
 import profileRoutes from './src/routes/profileRoutes';
+import statistikRoutes from './src/routes/statistikRoutes';
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ app.use('/api/saran', saranRoutes);         // http://localhost:3000/api/saran
 app.use('/api/kader', kaderRoutes); // http://localhost:3000/api/kader
 app.use('/api/debug', debugRoutes); // http://localhost:3000/api/debug
 app.use('/api/profile', profileRoutes); //untuk handler profile
+app.use('/api/statistik', statistikRoutes);
 
 // Test Root
 app.get('/', (req: Request, res: Response) => {
