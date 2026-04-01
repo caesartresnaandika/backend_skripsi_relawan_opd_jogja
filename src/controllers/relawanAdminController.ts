@@ -312,6 +312,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
     const client = await pool.connect();
     let insertedCount = 0;
     let updatedCount = 0;
+    let updatedProfileCount = 0;
     const errors: string[] = [];
 
     try {
@@ -335,14 +336,37 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                 const checkRes = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [item.nik]);
 
                 if (checkRes.rows.length > 0) {
-                    // NIK sudah ada - ambil ID-nya
+                    // NIK sudah ada - UPDATE data profil yang berubah
                     userId = checkRes.rows[0].user_id;
+
+                    // Update data di tabel users (nama & no_hp)
+                    await client.query(
+                        `UPDATE users
+                         SET nama_lengkap = $1,
+                             no_hp        = COALESCE($2, no_hp),
+                             updated_at   = CURRENT_TIMESTAMP
+                         WHERE user_id = $3`,
+                        [item.namaLengkap, item.noHp || null, userId]
+                    );
+
                     const getRelawan = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
 
                     if (getRelawan.rows.length > 0) {
                         relawanId = getRelawan.rows[0].relawan_id;
+
+                        // Update data di tabel relawan (alamat, kelurahan, jenis kelamin)
+                        await client.query(
+                            `UPDATE relawan
+                             SET jenis_kelamin = $1,
+                                 alamat_ktp    = $2,
+                                 kelurahan     = $3,
+                                 updated_at    = CURRENT_TIMESTAMP
+                             WHERE relawan_id = $4`,
+                            [item.jenisKelamin, item.alamat, item.kelurahan, relawanId]
+                        );
+                        updatedProfileCount++;
                     } else {
-                        // User ada tapi profil relawan tidak ada - create relawan profile
+                        // User ada tapi profil relawan tidak ada - buat profil relawan baru
                         const relawanRes = await client.query(
                             `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
                              VALUES ($1, $2, $3, $4) RETURNING relawan_id`,
@@ -481,16 +505,17 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
         }
 
         const parts: string[] = [];
-        if (insertedCount > 0) parts.push(`Berhasil menambahkan ${insertedCount} data baru.`);
-        if (updatedCount > 0) parts.push(`Berhasil mengupdate ${updatedCount} data.`);
+        if (insertedCount > 0) parts.push(`Berhasil menambahkan ${insertedCount} relawan baru.`);
+        if (updatedProfileCount > 0) parts.push(`Berhasil memperbarui profil ${updatedProfileCount} relawan yang sudah terdaftar.`);
+        if (updatedCount > 0) parts.push(`Berhasil memperbarui ${updatedCount} data penugasan.`);
         if (errors.length > 0) parts.push(`Ada ${errors.length} peringatan/error.`);
 
-        const totalSuccess = insertedCount + updatedCount;
+        const totalSuccess = insertedCount + updatedProfileCount + updatedCount;
 
         res.status(totalSuccess > 0 ? 201 : 400).json({
             success: totalSuccess > 0,
-            message: parts.join('\n') || 'Tidak ada data yang diproses',
-            data: { insertedCount, updatedCount, errors }
+            message: parts.join(' ') || 'Tidak ada data yang diproses',
+            data: { insertedCount, updatedProfileCount, updatedCount, errors }
         });
 
     } catch (fatalError: any) {
