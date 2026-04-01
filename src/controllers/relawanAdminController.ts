@@ -5,6 +5,14 @@ import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import bcrypt from 'bcrypt';
 
+// Helper: set RLS context pada raw client (wajib dipanggil setelah BEGIN)
+const setClientContext = async (client: any, user: any) => {
+    const userId = user?.user_id ?? user?.id;
+    const role = user?.role;
+    await client.query('SET LOCAL app.current_user_id = $1', [userId]);
+    await client.query('SET LOCAL app.current_user_role = $1', [role]);
+};
+
 // 1. Dapatkan semua relawan dengan detail informasi User, Relawan, dan OPD Penugasan
 export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -109,6 +117,7 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
         return;
     }
 
+    // Map nilai frontend ke nilai ENUM database PostgreSQL
     const statusDB = status === 'Disetujui' ? 'Diterima' : 'Ditolak';
 
     try {
@@ -151,6 +160,12 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
             }
         }
 
+        // FIX: response yang hilang — sebelumnya fungsi tidak pernah mengirim response
+        res.status(200).json({
+            success: true,
+            message: `Pengajuan berhasil ${status === 'Disetujui' ? 'disetujui' : 'ditolak'}`
+        });
+
     } catch (error: any) {
         console.error('Error in reviewPengajuan:', error);
         res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
@@ -179,9 +194,7 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
 
     try {
         await client.query('BEGIN');
-        // ✅ Set RLS context for this transaction
-        await client.query(`SET LOCAL app.current_user_role = $1`, [req.user!.role]);
-        await client.query(`SET LOCAL app.current_user_id = $1`, [req.user!.id]);
+        await setClientContext(client, req.user); // FIX: set RLS context
 
         const checkNikQuery = `SELECT user_id FROM users WHERE nik = $1`;
         const checkNikRes = await client.query(checkNikQuery, [nik]);
@@ -258,7 +271,7 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
     }
 };
 
-// 6. Tambah / Update Relawan Bulk (dari Excel) — FIXED: RLS context di-set per transaksi
+// 6. Tambah / Update Relawan Bulk (dari Excel & Form Manual)
 export const createBulkRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
     const rawData = req.body;
 
@@ -267,6 +280,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
         return;
     }
 
+    // Helper: normalisasi key dari format Excel maupun Axios frontend
     const normalizeItem = (raw: any) => {
         const cleanExcelData: Record<string, any> = {};
         for (const key of Object.keys(raw)) {
@@ -275,9 +289,11 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
         }
 
         const getVal = (frontendKey: string, possibleExcelKeys: string[]) => {
-            if (raw[frontendKey] !== undefined) return String(raw[frontendKey]);
+            if (raw[frontendKey] !== undefined && raw[frontendKey] !== null && raw[frontendKey] !== '')
+                return String(raw[frontendKey]);
             for (const key of possibleExcelKeys) {
-                if (cleanExcelData[key] !== undefined) return String(cleanExcelData[key]);
+                if (cleanExcelData[key] !== undefined && cleanExcelData[key] !== null && cleanExcelData[key] !== '')
+                    return String(cleanExcelData[key]);
             }
             return '';
         };
@@ -317,13 +333,10 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
 
             try {
                 await client.query('BEGIN');
-
-                // ✅ FIX: Set RLS context agar UPDATE ke tabel relawan & penugasan_relawan
-                //         tidak diblokir oleh Row Level Security.
-                //         Tanpa ini, UPDATE relawan akan gagal → ROLLBACK seluruh transaksi
-                //         termasuk UPDATE users, sehingga nama_lengkap tidak pernah tersimpan.
-                await client.query(`SET LOCAL app.current_user_role = $1`, [req.user!.role]);
-                await client.query(`SET LOCAL app.current_user_id = $1`, [req.user!.id]);
+                // FIX: Set RLS context di dalam transaksi agar policy berlaku pada client ini.
+                // Tanpa ini, INSERT/UPDATE pada tabel ber-RLS akan gagal dan
+                // menyebabkan ROLLBACK yang juga membatalkan UPDATE users/relawan.
+                await setClientContext(client, req.user);
 
                 let userId: number;
                 let relawanId: number;
@@ -331,7 +344,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                 const checkRes = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [item.nik]);
 
                 if (checkRes.rows.length > 0) {
-                    // ── NIK sudah ada → UPDATE profil ────────────────────────────────────
+                    // ── NIK sudah ada: UPDATE profil ──────────────────────────────
                     userId = checkRes.rows[0].user_id;
 
                     await client.query(
@@ -343,9 +356,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                         [item.namaLengkap, item.noHp || null, userId]
                     );
 
-                    const getRelawan = await client.query(
-                        `SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]
-                    );
+                    const getRelawan = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
 
                     if (getRelawan.rows.length > 0) {
                         relawanId = getRelawan.rows[0].relawan_id;
@@ -367,10 +378,9 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                             [userId, item.jenisKelamin, item.alamat, item.kelurahan]
                         );
                         relawanId = relawanRes.rows[0].relawan_id;
-                        updatedProfileCount++;
                     }
                 } else {
-                    // ── NIK baru → INSERT user + relawan ────────────────────────────────
+                    // ── NIK baru: INSERT user + relawan ──────────────────────────
                     const salt = await bcrypt.genSalt(10);
                     const hashedPassword = await bcrypt.hash(item.nik, salt);
 
@@ -389,7 +399,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     relawanId = relawanRes.rows[0].relawan_id;
                 }
 
-                // ── Setup Penugasan ──────────────────────────────────────────────────────
+                // ── Proses Penugasan ──────────────────────────────────────────────
                 const assignmentsToProcess: any[] = item.assignments && item.assignments.length > 0
                     ? item.assignments
                     : [{
@@ -414,8 +424,9 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     }
 
                     if (!opdId) {
+                        // Tidak ada OPD — lewati penugasan tapi jangan batalkan transaksi profil
                         if (namaOpd) {
-                            errors.push(`Baris ${rowNumber} (NIK ${item.nik}): OPD "${namaOpd}" tidak ditemukan. Data relawan tersimpan, tapi tanpa penugasan.`);
+                            errors.push(`Baris ${rowNumber} (NIK ${item.nik}): OPD "${namaOpd}" tidak ditemukan. Profil tersimpan, penugasan dilewati.`);
                         }
                         continue;
                     }
@@ -437,7 +448,9 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                                 WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) LIMIT 1`,
                                 [namaKader]
                             );
-                            if (kaderFallback.rows.length > 0) kaderId = kaderFallback.rows[0].kader_id;
+                            if (kaderFallback.rows.length > 0) {
+                                kaderId = kaderFallback.rows[0].kader_id;
+                            }
                         }
                     }
 
@@ -453,10 +466,10 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     if (checkPenugasan.rows.length > 0) {
                         await client.query(
                             `UPDATE penugasan_relawan
-                             SET detail_jabatan   = $1,
-                                 penugasan        = $2,
+                             SET detail_jabatan = $1,
+                                 penugasan = $2,
                                  status_keaktifan = $3,
-                                 updated_at       = CURRENT_TIMESTAMP
+                                 updated_at = CURRENT_TIMESTAMP
                              WHERE penugasan_id = $4`,
                             [
                                 assign.detail || assign.detailJabatan || null,
@@ -520,6 +533,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
     }
 };
 
+
 // 7. Dapatkan daftar kader berdasarkan opd_id (untuk dropdown di form)
 export const getkaderByOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     const { opd_id } = req.query;
@@ -550,9 +564,7 @@ export const updateRelawan = async (req: AuthRequest, res: Response): Promise<vo
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        // ✅ Set RLS context
-        await client.query(`SET LOCAL app.current_user_role = $1`, [req.user!.role]);
-        await client.query(`SET LOCAL app.current_user_id = $1`, [req.user!.id]);
+        await setClientContext(client, req.user); // FIX: set RLS context
 
         await client.query(
             `UPDATE relawan SET alamat_ktp = $1, kelurahan = $2, jenis_kelamin = $3, updated_at = CURRENT_TIMESTAMP

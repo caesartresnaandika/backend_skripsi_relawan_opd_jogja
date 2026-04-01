@@ -5,6 +5,17 @@ import { OpdAuthRequest } from '../middleware/opdMiddleware';
 import pool from '../../config/db';
 import bcrypt from 'bcrypt';
 
+// Helper: set RLS context pada raw client (wajib dipanggil setelah BEGIN)
+const setClientContext = async (client: any, user: any, opdId?: number) => {
+    const userId = user?.user_id ?? user?.id;
+    const role = user?.role;
+    await client.query('SET LOCAL app.current_user_id = $1', [userId]);
+    await client.query('SET LOCAL app.current_user_role = $1', [role]);
+    if (opdId !== undefined) {
+        await client.query('SET LOCAL app.current_opd_id = $1', [opdId]);
+    }
+};
+
 // 1. Dapatkan Daftar Relawan yang bertugas di OPD ini
 export const getRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
@@ -49,7 +60,10 @@ export const getSkByOpd = async (req: OpdAuthRequest, res: Response): Promise<vo
             ORDER BY sk.tanggal_terbit DESC
         `, [opdId], req.user);
 
-        res.status(200).json({ success: true, data: result.rows });
+        res.status(200).json({
+            success: true,
+            data: result.rows
+        });
     } catch (error: any) {
         console.error('Error in getSkByOpd:', error);
         res.status(500).json({ success: false, message: 'Server error' });
@@ -84,12 +98,10 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
 
     try {
         await client.query('BEGIN');
-        // ✅ Set RLS context
-        await client.query(`SET LOCAL app.current_user_role = $1`, [req.user!.role]);
-        await client.query(`SET LOCAL app.current_user_id = $1`, [req.user!.id]);
-        await client.query(`SET LOCAL app.current_opd_id = $1`, [opdId]);
+        await setClientContext(client, req.user, opdId); // FIX: set RLS context
 
-        const checkNikRes = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nik]);
+        const checkNikQuery = `SELECT user_id FROM users WHERE nik = $1`;
+        const checkNikRes = await client.query(checkNikQuery, [nik]);
 
         if (checkNikRes.rows.length > 0) {
             await client.query('ROLLBACK');
@@ -122,7 +134,9 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
                 `SELECT kader_id FROM kader WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) AND opd_id = $2 LIMIT 1`,
                 [namaKader, opdId]
             );
-            if (kaderLookup.rows.length > 0) kaderId = kaderLookup.rows[0].kader_id;
+            if (kaderLookup.rows.length > 0) {
+                kaderId = kaderLookup.rows[0].kader_id;
+            }
         }
 
         await client.query(
@@ -143,7 +157,7 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
     }
 };
 
-// 4. Tambah / Update Relawan Excel Khusus OPD (Bulk) — FIXED: RLS context di-set per transaksi
+// 4. Tambah / Update Relawan Excel Khusus OPD (Bulk)
 export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     const rawData = req.body;
     const opdId = req.opd_id;
@@ -171,7 +185,8 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
 
             const getVal = (possibleKeys: string[]) => {
                 for (const key of possibleKeys) {
-                    if (item[key] !== undefined) return String(item[key]);
+                    if (item[key] !== undefined && item[key] !== null && item[key] !== '')
+                        return String(item[key]);
                 }
                 return '';
             };
@@ -193,14 +208,10 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
 
             try {
                 await client.query('BEGIN');
-
-                // ✅ FIX: Set RLS context agar UPDATE ke tabel relawan & penugasan_relawan
-                //         tidak diblokir oleh Row Level Security.
-                //         Tanpa ini, UPDATE relawan akan gagal → ROLLBACK seluruh transaksi
-                //         termasuk UPDATE users, sehingga nama_lengkap tidak pernah tersimpan.
-                await client.query(`SET LOCAL app.current_user_role = $1`, [req.user!.role]);
-                await client.query(`SET LOCAL app.current_user_id = $1`, [req.user!.id]);
-                await client.query(`SET LOCAL app.current_opd_id = $1`, [opdId]);
+                // FIX: Set RLS context di dalam transaksi agar policy berlaku pada client ini.
+                // Tanpa ini, INSERT/UPDATE pada tabel ber-RLS akan gagal dan
+                // menyebabkan ROLLBACK yang juga membatalkan UPDATE users/relawan.
+                await setClientContext(client, req.user, opdId);
 
                 let userId: number;
                 let relawanId: number;
@@ -208,7 +219,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                 const checkRes = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nik]);
 
                 if (checkRes.rows.length > 0) {
-                    // ── NIK sudah ada → UPDATE profil ────────────────────────────────────
+                    // ── NIK sudah ada: UPDATE profil ──────────────────────────────
                     userId = checkRes.rows[0].user_id;
 
                     await client.query(
@@ -220,9 +231,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                         [namaLengkap, noHp || null, userId]
                     );
 
-                    const getRelawan = await client.query(
-                        `SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]
-                    );
+                    const getRelawan = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
 
                     if (getRelawan.rows.length > 0) {
                         relawanId = getRelawan.rows[0].relawan_id;
@@ -244,10 +253,9 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                             [userId, jenisKelamin, alamat, kelurahan]
                         );
                         relawanId = relawanRes.rows[0].relawan_id;
-                        updatedProfileCount++;
                     }
                 } else {
-                    // ── NIK baru → INSERT user + relawan ────────────────────────────────
+                    // ── NIK baru: INSERT user + relawan ──────────────────────────
                     const salt = await bcrypt.genSalt(10);
                     const hashedPassword = await bcrypt.hash(nik, salt);
 
@@ -266,7 +274,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                     relawanId = relawanRes.rows[0].relawan_id;
                 }
 
-                // ── Setup Penugasan (khusus OPD ini) ────────────────────────────────────
+                // ── Proses Penugasan (khusus OPD ini) ───────────────────────────
                 let kaderId: number | null = null;
                 if (kaderName && kaderName !== '-') {
                     const kaderLookup = await client.query(
@@ -336,6 +344,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
     }
 };
 
+
 export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     const opdId = req.opd_id;
     const relawanId = parseInt(req.params.relawan_id as string);
@@ -344,10 +353,7 @@ export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        // ✅ Set RLS context
-        await client.query(`SET LOCAL app.current_user_role = $1`, [req.user!.role]);
-        await client.query(`SET LOCAL app.current_user_id = $1`, [req.user!.id]);
-        await client.query(`SET LOCAL app.current_opd_id = $1`, [opdId]);
+        await setClientContext(client, req.user, opdId); // FIX: set RLS context
 
         const checkAccess = await client.query(
             `SELECT pr.penugasan_id FROM penugasan_relawan pr
@@ -355,7 +361,6 @@ export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
             [relawanId, opdId]
         );
         if (checkAccess.rows.length === 0) {
-            await client.query('ROLLBACK');
             res.status(403).json({ success: false, message: 'Relawan ini tidak terdaftar di instansi Anda' });
             return;
         }
