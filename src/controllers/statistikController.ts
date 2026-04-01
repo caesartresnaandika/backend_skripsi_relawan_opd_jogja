@@ -49,7 +49,7 @@ export const getStatistikKelurahan = async (req: AuthRequest, res: Response): Pr
                   AND pr.opd_id = $1
                 GROUP BY r.kelurahan
                 ORDER BY jumlah DESC
-                LIMIT 10
+                LIMIT 5
             `, [user.opd_id], user);
         } else {
             result = await executeQueryWithContext(`
@@ -61,7 +61,7 @@ export const getStatistikKelurahan = async (req: AuthRequest, res: Response): Pr
                   AND r.kelurahan != '-'
                 GROUP BY r.kelurahan
                 ORDER BY jumlah DESC
-                LIMIT 10
+                LIMIT 5
             `, [], user);
         }
 
@@ -87,6 +87,7 @@ export const getRelawanPerKader = async (req: AuthRequest, res: Response): Promi
                 WHERE k.opd_id = $1
                 GROUP BY k.kader_id, k.nama_kader
                 ORDER BY value DESC
+                LIMIT 5
             `, [user.opd_id], user);
         } else {
             result = await executeQueryWithContext(`
@@ -96,6 +97,7 @@ export const getRelawanPerKader = async (req: AuthRequest, res: Response): Promi
                     AND pr.status_keaktifan = 'Aktif'
                 GROUP BY k.kader_id, k.nama_kader
                 ORDER BY value DESC
+                LIMIT 5
             `, [], user);
         }
 
@@ -128,6 +130,7 @@ export const getKaderPerOPD = async (req: AuthRequest, res: Response): Promise<v
                 WHERE o.is_active = true
                 GROUP BY o.opd_id, o.nama_opd
                 ORDER BY value DESC
+                LIMIT 5
             `, [], user);
         }
 
