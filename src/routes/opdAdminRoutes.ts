@@ -11,6 +11,8 @@ import {
     updateKaderByOpd,
     deleteKaderByOpd,
     createBulkKaderByOpd,
+    assignPicKader,
+    getPicKaderHistory
 } from '../controllers/kaderController';
 import { 
     getRelawanByOpd, 
@@ -35,6 +37,8 @@ router.post('/kader', createKaderByOpd); // (Manual)
 router.post('/kader/bulk', createBulkKaderByOpd); // ✨ (Excel Bulk khusus OPD)
 router.patch('/kader/:id', updateKaderByOpd);
 router.delete('/kader/:id', deleteKaderByOpd);
+router.get('/kader/:id/pic-history', getPicKaderHistory);
+router.post('/kader/:id/assign-pic', assignPicKader);
 // 🚨 router.patch('/kader/:id/status', toggleKaderStatus); <-- BARIS INI SUDAH DIHAPUS DEMI KEAMANAN!
 
 // 3. Data Relawan & Surat Keputusan

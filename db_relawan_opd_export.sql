@@ -25,13 +25,7 @@ CREATE TABLE IF NOT EXISTS public.kader
     deskripsi text COLLATE pg_catalog."default",
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    pic text COLLATE pg_catalog."default",
     is_active boolean DEFAULT true,
-    nik_pic character varying(16) COLLATE pg_catalog."default",
-    user_id integer,
-    no_hp_pic character varying(20) COLLATE pg_catalog."default",
-    alamat_pic text COLLATE pg_catalog."default",
-    kelurahan_pic character varying(100) COLLATE pg_catalog."default",
     CONSTRAINT komunitas_pkey PRIMARY KEY (kader_id)
 );
 
@@ -101,6 +95,21 @@ CREATE TABLE IF NOT EXISTS public.penugasan_relawan
 );
 
 ALTER TABLE IF EXISTS public.penugasan_relawan
+    ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.pic_kader
+(
+    pic_kader_id serial NOT NULL,
+    relawan_id integer NOT NULL,
+    kader_id integer NOT NULL,
+    tanggal_mulai date DEFAULT CURRENT_DATE,
+    tanggal_selesai date,
+    status character varying(20) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Aktif'::character varying,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pic_kader_pkey PRIMARY KEY (pic_kader_id)
+);
+
+ALTER TABLE IF EXISTS public.pic_kader
     ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.relawan
@@ -177,13 +186,6 @@ ALTER TABLE IF EXISTS public.audit_logs
 
 
 ALTER TABLE IF EXISTS public.kader
-    ADD CONSTRAINT fk_kader_user FOREIGN KEY (user_id)
-    REFERENCES public.users (user_id) MATCH SIMPLE
-    ON UPDATE CASCADE
-    ON DELETE SET NULL;
-
-
-ALTER TABLE IF EXISTS public.kader
     ADD CONSTRAINT fk_komunitas_opd FOREIGN KEY (opd_id)
     REFERENCES public.opd (opd_id) MATCH SIMPLE
     ON UPDATE CASCADE
@@ -254,6 +256,22 @@ ALTER TABLE IF EXISTS public.penugasan_relawan
     REFERENCES public.surat_keputusan (sk_id) MATCH SIMPLE
     ON UPDATE CASCADE
     ON DELETE SET NULL;
+
+
+ALTER TABLE IF EXISTS public.pic_kader
+    ADD CONSTRAINT fk_pic_kader FOREIGN KEY (kader_id)
+    REFERENCES public.kader (kader_id) MATCH SIMPLE
+    ON UPDATE CASCADE
+    ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS unique_active_pic_per_kader
+    ON public.pic_kader(kader_id);
+
+
+ALTER TABLE IF EXISTS public.pic_kader
+    ADD CONSTRAINT fk_pic_relawan FOREIGN KEY (relawan_id)
+    REFERENCES public.relawan (relawan_id) MATCH SIMPLE
+    ON UPDATE CASCADE
+    ON DELETE CASCADE;
 
 
 ALTER TABLE IF EXISTS public.relawan

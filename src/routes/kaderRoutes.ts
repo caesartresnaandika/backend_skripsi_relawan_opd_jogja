@@ -8,7 +8,9 @@ import {
     createBulkKader,
     updateKader,
     deleteKader,
-    toggleKaderStatus
+    toggleKaderStatus,
+    assignPicKader,
+    getPicKaderHistory
 } from '../controllers/kaderController';
 
 const router = Router();
@@ -24,5 +26,7 @@ router.post('/', createKader);
 router.put('/:id', updateKader);
 router.delete('/:id', deleteKader);
 router.patch('/:id/status', toggleKaderStatus);
+router.get('/:id/pic-history', getPicKaderHistory);
+router.post('/:id/assign-pic', assignPicKader);
 
 export default router;

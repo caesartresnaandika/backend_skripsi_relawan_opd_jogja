@@ -4,7 +4,6 @@ import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { OpdAuthRequest } from '../middleware/opdMiddleware';
-import bcrypt from 'bcrypt';
 
 // ============================================================
 // SUPER ADMIN — dipakai via /api/kader (kaderRoutes.ts)
@@ -17,17 +16,38 @@ export const getAllKader = async (req: AuthRequest, res: Response): Promise<void
         let params: any[];
         if (opd_id) {
             query = `
-                SELECT k.kader_id, k.nama_kader, k.deskripsi, k.pic, k.nik_pic,
-                       k.opd_id, k.is_active, k.created_at, k.updated_at, o.nama_opd,k.no_hp_pic, k.alamat_pic, k.kelurahan_pic
-                FROM kader k JOIN opd o ON k.opd_id = o.opd_id
-                WHERE k.opd_id = $1 ORDER BY k.created_at DESC;
+                SELECT
+                    k.kader_id, k.nama_kader, k.deskripsi, k.opd_id,
+                    k.is_active, k.created_at, k.updated_at, o.nama_opd,
+                    u.nama_lengkap AS pic_nama,
+                    u.nik          AS pic_nik,
+                    u.no_hp        AS pic_no_hp,
+                    pk.relawan_id  AS pic_relawan_id,
+                    pk.tanggal_mulai AS pic_tanggal_mulai
+                FROM kader k
+                JOIN opd o ON k.opd_id = o.opd_id
+                LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status = 'Aktif'
+                LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
+                LEFT JOIN users u    ON r.user_id = u.user_id
+                WHERE k.opd_id = $1
+                ORDER BY k.created_at DESC;
             `;
             params = [opd_id];
         } else {
             query = `
-                SELECT k.kader_id, k.nama_kader, k.deskripsi, k.pic, k.nik_pic,
-                       k.opd_id, k.is_active, k.created_at, k.updated_at, o.nama_opd, k.no_hp_pic, k.alamat_pic, k.kelurahan_pic
-                FROM kader k JOIN opd o ON k.opd_id = o.opd_id
+                SELECT
+                    k.kader_id, k.nama_kader, k.deskripsi, k.opd_id,
+                    k.is_active, k.created_at, k.updated_at, o.nama_opd,
+                    u.nama_lengkap AS pic_nama,
+                    u.nik          AS pic_nik,
+                    u.no_hp        AS pic_no_hp,
+                    pk.relawan_id  AS pic_relawan_id,
+                    pk.tanggal_mulai AS pic_tanggal_mulai
+                FROM kader k
+                JOIN opd o ON k.opd_id = o.opd_id
+                LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status = 'Aktif'
+                LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
+                LEFT JOIN users u    ON r.user_id = u.user_id
                 ORDER BY k.created_at DESC;
             `;
             params = [];
@@ -44,9 +64,19 @@ export const getKaderById = async (req: AuthRequest, res: Response): Promise<voi
     const { id } = req.params;
     try {
         const query = `
-            SELECT k.kader_id, k.nama_kader, k.deskripsi, k.pic, k.nik_pic,
-                   k.opd_id, k.is_active, k.created_at, k.updated_at, o.nama_opd,k.no_hp_pic, k.alamat_pic, k.kelurahan_pic
-            FROM kader k JOIN opd o ON k.opd_id = o.opd_id
+            SELECT
+                k.kader_id, k.nama_kader, k.deskripsi, k.opd_id,
+                k.is_active, k.created_at, k.updated_at, o.nama_opd,
+                u.nama_lengkap AS pic_nama,
+                u.nik          AS pic_nik,
+                u.no_hp        AS pic_no_hp,
+                pk.relawan_id  AS pic_relawan_id,
+                pk.tanggal_mulai AS pic_tanggal_mulai
+            FROM kader k
+            JOIN opd o ON k.opd_id = o.opd_id
+            LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status = 'Aktif'
+            LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
+            LEFT JOIN users u    ON r.user_id = u.user_id
             WHERE k.kader_id = $1;
         `;
         const result = await executeQueryWithContext(query, [id], req.user);
@@ -62,8 +92,9 @@ export const getKaderById = async (req: AuthRequest, res: Response): Promise<voi
 };
 
 export const createKader = async (req: AuthRequest, res: Response): Promise<void> => {
-    const { opd_id, nama_kader, deskripsi, pic, nik_pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
+    const { opd_id, nama_kader, deskripsi, nik_pic, nama_pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
 
+    // Validasi wajib
     if (!opd_id || !nama_kader) {
         res.status(400).json({ success: false, message: 'Field opd_id dan nama_kader wajib diisi' });
         return;
@@ -77,52 +108,97 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
         return;
     }
 
+    const client = await pool.connect();
     try {
-        const checkNik = await executeQueryWithContext(`SELECT user_id FROM users WHERE nik = $1`, [nik_pic], req.user);
-        if (checkNik.rows.length > 0) {
-            res.status(400).json({ success: false, message: 'NIK PIC sudah terdaftar di sistem' });
-            return;
+        await client.query('BEGIN');
+
+        // ── LANGKAH 1: Cari atau buat user + relawan dari NIK PIC ──
+        let relawanId: number;
+
+        const checkUser = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nik_pic]);
+
+        if (checkUser.rows.length > 0) {
+            // NIK sudah ada di users
+            const userId = checkUser.rows[0].user_id;
+            const checkRelawan = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
+
+            if (checkRelawan.rows.length > 0) {
+                // Sudah jadi relawan → pakai langsung
+                relawanId = checkRelawan.rows[0].relawan_id;
+            } else {
+                // Ada di users tapi belum ada di relawan → buat profil relawan
+                const relawanRes = await client.query(
+                    `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                     VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
+                    [userId, alamat_pic || '-', kelurahan_pic || '-']
+                );
+                relawanId = relawanRes.rows[0].relawan_id;
+            }
+        } else {
+            // NIK belum ada → buat user baru + relawan baru
+            const bcrypt = await import('bcrypt');
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(String(nik_pic), salt);
+
+            const userRes = await client.query(
+                `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                 VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
+                [nik_pic, nama_pic || '-', no_hp_pic || null, hashedPassword]
+            );
+            const userId = userRes.rows[0].user_id;
+
+            const relawanRes = await client.query(
+                `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                 VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
+                [userId, alamat_pic || '-', kelurahan_pic || '-']
+            );
+            relawanId = relawanRes.rows[0].relawan_id;
         }
 
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(String(nik_pic), salt);
-
-        const userRes = await executeQueryWithContext(
-            `INSERT INTO users (nik, nama_lengkap, password, role, is_active) VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id;`,
-            [nik_pic, pic || nama_kader, hashedPassword], req.user
+        // ── LANGKAH 2: INSERT kader (tanpa kolom PIC) ──
+        const kaderRes = await client.query(
+            `INSERT INTO kader (opd_id, nama_kader, deskripsi) VALUES ($1, $2, $3) RETURNING kader_id, nama_kader`,
+            [opd_id, nama_kader, deskripsi || null]
         );
-        const userId = userRes.rows[0].user_id;
+        const kaderId = kaderRes.rows[0].kader_id;
 
-        const result = await executeQueryWithContext(
-            `INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id, no_hp_pic, alamat_pic, kelurahan_pic) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *;`,
-            [opd_id, nama_kader, deskripsi || null, pic || null, nik_pic, userId, no_hp_pic || null, alamat_pic || null, kelurahan_pic || null], req.user
+        // ── LANGKAH 3: INSERT ke pic_kader ──
+        await client.query(
+            `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status)
+             VALUES ($1, $2, CURRENT_DATE, 'Aktif')`,
+            [relawanId, kaderId]
         );
 
+        await client.query('COMMIT');
         res.status(201).json({
             success: true,
-            message: `Kader berhasil ditambahkan. Akun login PIC dibuat dengan NIK: ${nik_pic}`,
-            data: result.rows[0]
+            message: `Kader berhasil ditambahkan dengan PIC (NIK: ${nik_pic})`,
+            data: kaderRes.rows[0]
         });
     } catch (error: any) {
+        await client.query('ROLLBACK');
         console.error('FULL ERROR in createKader:', error);
         let errorMessage = 'Terjadi kesalahan pada server';
         if (error.code === '23505') errorMessage = 'Nama kader sudah digunakan di OPD yang sama';
         if (error.code === '23503') errorMessage = 'OPD yang dipilih tidak ditemukan';
         res.status(500).json({ success: false, message: errorMessage, error_dev: error.message });
+    } finally {
+        client.release();
     }
 };
 
 export const updateKader = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { nama_kader, deskripsi, pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
+    const { nama_kader, deskripsi } = req.body;
     if (!nama_kader) {
         res.status(400).json({ success: false, message: 'Field nama_kader wajib diisi' });
         return;
     }
     try {
         const result = await executeQueryWithContext(
-            `UPDATE kader SET nama_kader = $1, deskripsi = $2, pic = $3, no_hp_pic = $4, alamat_pic = $5, kelurahan_pic = $6, updated_at = CURRENT_TIMESTAMP WHERE kader_id = $7 RETURNING *;`,
-            [nama_kader, deskripsi || null, pic || null, no_hp_pic || null, alamat_pic || null, kelurahan_pic || null, id], req.user
+            `UPDATE kader SET nama_kader = $1, deskripsi = $2, updated_at = CURRENT_TIMESTAMP
+             WHERE kader_id = $3 RETURNING kader_id, nama_kader, deskripsi;`,
+            [nama_kader, deskripsi || null, id], req.user
         );
         if (result.rows.length === 0) {
             res.status(404).json({ success: false, message: 'Kader tidak ditemukan' });
@@ -276,7 +352,6 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
                     `SELECT opd_id FROM opd WHERE LOWER(TRIM(nama_opd)) = LOWER(TRIM($1)) AND is_active = true LIMIT 1`,
                     [namaOpd]
                 );
-
                 if (opdCheck.rows.length === 0) {
                     errors.push(`Baris ${rowNumber} ("${namaKader}"): OPD "${namaOpd}" tidak ditemukan/tidak aktif.`);
                     await client.query('ROLLBACK');
@@ -284,38 +359,60 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
                 }
                 const opdId = opdCheck.rows[0].opd_id;
 
-                // Cek NIK
-                const checkNik = await client.query(
-                    `SELECT user_id FROM users WHERE nik = $1`, [nikPic]
-                );
-                if (checkNik.rows.length > 0) {
-                    skipped.push(`"${namaKader}" (NIK PIC ${nikPic} sudah terdaftar)`);
-                    await client.query('ROLLBACK');
-                    continue;
+                // ── Cari atau buat relawan dari NIK PIC ──
+                let relawanId: number;
+                const checkUser = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nikPic]);
+
+                if (checkUser.rows.length > 0) {
+                    const userId = checkUser.rows[0].user_id;
+                    const checkRelawan = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
+                    if (checkRelawan.rows.length > 0) {
+                        relawanId = checkRelawan.rows[0].relawan_id;
+                    } else {
+                        const relawanRes = await client.query(
+                            `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                             VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
+                            [userId, alamatPic || '-', kelurahanPic || '-']
+                        );
+                        relawanId = relawanRes.rows[0].relawan_id;
+                    }
+                } else {
+                    const bcrypt = await import('bcrypt');
+                    const salt = await bcrypt.genSalt(10);
+                    const hashedPassword = await bcrypt.hash(nikPic, salt);
+                    const userRes = await client.query(
+                        `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                         VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
+                        [nikPic, pic || '-', noHpPic || null, hashedPassword]
+                    );
+                    const userId = userRes.rows[0].user_id;
+                    const relawanRes = await client.query(
+                        `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                         VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
+                        [userId, alamatPic || '-', kelurahanPic || '-']
+                    );
+                    relawanId = relawanRes.rows[0].relawan_id;
                 }
 
-                // Insert users
-                const salt = await bcrypt.genSalt(10);
-                const hashedPassword = await bcrypt.hash(nikPic, salt);
-                const userRes = await client.query(
-                    `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
-                     VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id`,
-                    [nikPic, pic || namaKader, hashedPassword]
+                // ── INSERT kader (tanpa kolom PIC) ──
+                const kaderRes = await client.query(
+                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, is_active) VALUES ($1, $2, $3, true) RETURNING kader_id`,
+                    [opdId, namaKader, deskripsi]
                 );
-                const userId = userRes.rows[0].user_id;
+                const kaderId = kaderRes.rows[0].kader_id;
 
-                // Insert kader
+                // ── INSERT pic_kader ──
                 await client.query(
-                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id, is_active, no_hp_pic, alamat_pic, kelurahan_pic)
-                     VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9)`,
-                    [opdId, namaKader, deskripsi, pic, nikPic, userId, noHpPic, alamatPic, kelurahanPic]
+                    `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status)
+                     VALUES ($1, $2, CURRENT_DATE, 'Aktif')`,
+                    [relawanId, kaderId]
                 );
 
-                await client.query('COMMIT'); // Simpan permanen jika sukses semua
+                await client.query('COMMIT');
                 inserted.push(namaKader);
 
             } catch (rowError: any) {
-                await client.query('ROLLBACK'); // Batalkan khusus baris ini jika ada tabel yang gagal
+                await client.query('ROLLBACK');
                 console.error(`Error processing row ${rowNumber}:`, rowError);
                 errors.push(`Baris ${rowNumber} ("${namaKader}") gagal: ${rowError.message}`);
             }
@@ -346,17 +443,26 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
 
 export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
-        const opdId = req.opd_id; // ✨ PASTIKAN BARIS INI ADA DI SINI
+        const opdId = req.opd_id;
 
         const result = await executeQueryWithContext(`
-            SELECT k.kader_id, k.nama_kader, k.deskripsi, k.pic, k.nik_pic, k.is_active, 
-                   k.created_at, k.updated_at, o.nama_opd,k.no_hp_pic, k.alamat_pic, k.kelurahan_pic,
-                   COUNT(pr.relawan_id) as jumlah_anggota
+            SELECT
+                k.kader_id, k.nama_kader, k.deskripsi, k.opd_id,
+                k.is_active, k.created_at, k.updated_at, o.nama_opd,
+                u.nama_lengkap AS pic_nama,
+                u.nik          AS pic_nik,
+                u.no_hp        AS pic_no_hp,
+                pk.relawan_id  AS pic_relawan_id,
+                pk.tanggal_mulai AS pic_tanggal_mulai,
+                COUNT(pr.relawan_id) AS jumlah_anggota
             FROM kader k
             JOIN opd o ON k.opd_id = o.opd_id
+            LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status = 'Aktif'
+            LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
+            LEFT JOIN users u    ON r.user_id = u.user_id
             LEFT JOIN penugasan_relawan pr ON k.kader_id = pr.kader_id AND pr.status_keaktifan = 'Aktif'
             WHERE k.opd_id = $1
-            GROUP BY k.kader_id, o.nama_opd
+            GROUP BY k.kader_id, o.nama_opd, u.nama_lengkap, u.nik, u.no_hp, pk.relawan_id, pk.tanggal_mulai
             ORDER BY k.nama_kader ASC
         `, [opdId], req.user);
 
@@ -368,51 +474,87 @@ export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise
 };
 
 export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
+    const opdId = req.opd_id;
+    const { nama_kader, deskripsi, nik_pic, nama_pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
+
+    if (!nama_kader) {
+        res.status(400).json({ success: false, message: 'Nama kader wajib diisi' });
+        return;
+    }
+    if (!nik_pic) {
+        res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
+        return;
+    }
+    if (String(nik_pic).length !== 16) {
+        res.status(400).json({ success: false, message: 'NIK PIC harus 16 digit' });
+        return;
+    }
+
+    const client = await pool.connect();
     try {
-        const opdId = req.opd_id;
-        const { nama_kader, deskripsi, pic, nik_pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
+        await client.query('BEGIN');
 
-        if (!nama_kader) {
-            res.status(400).json({ success: false, message: 'Nama kader wajib diisi' });
-            return;
-        }
-        if (!nik_pic) {
-            res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
-            return;
-        }
-        if (String(nik_pic).length !== 16) {
-            res.status(400).json({ success: false, message: 'NIK PIC harus 16 digit' });
-            return;
+        // ── Cari atau buat relawan dari NIK PIC ──
+        let relawanId: number;
+        const checkUser = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nik_pic]);
+
+        if (checkUser.rows.length > 0) {
+            const userId = checkUser.rows[0].user_id;
+            const checkRelawan = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
+            if (checkRelawan.rows.length > 0) {
+                relawanId = checkRelawan.rows[0].relawan_id;
+            } else {
+                const relawanRes = await client.query(
+                    `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                     VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
+                    [userId, alamat_pic || '-', kelurahan_pic || '-']
+                );
+                relawanId = relawanRes.rows[0].relawan_id;
+            }
+        } else {
+            const bcrypt = await import('bcrypt');
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(String(nik_pic), salt);
+            const userRes = await client.query(
+                `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                 VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
+                [nik_pic, nama_pic || '-', no_hp_pic || null, hashedPassword]
+            );
+            const userId = userRes.rows[0].user_id;
+            const relawanRes = await client.query(
+                `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                 VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
+                [userId, alamat_pic || '-', kelurahan_pic || '-']
+            );
+            relawanId = relawanRes.rows[0].relawan_id;
         }
 
-        const checkNik = await executeQueryWithContext(`SELECT user_id FROM users WHERE nik = $1`, [nik_pic], req.user);
-        if (checkNik.rows.length > 0) {
-            res.status(400).json({ success: false, message: 'NIK PIC sudah terdaftar di sistem' });
-            return;
-        }
-
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(String(nik_pic), salt);
-
-        const userRes = await executeQueryWithContext(
-            `INSERT INTO users (nik, nama_lengkap, password, role, is_active) VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id;`,
-            [nik_pic, pic || nama_kader, hashedPassword], req.user
+        // ── INSERT kader (tanpa kolom PIC) ──
+        const kaderRes = await client.query(
+            `INSERT INTO kader (opd_id, nama_kader, deskripsi) VALUES ($1, $2, $3) RETURNING kader_id, nama_kader`,
+            [opdId, nama_kader, deskripsi || null]
         );
-        const userId = userRes.rows[0].user_id;
+        const kaderId = kaderRes.rows[0].kader_id;
 
-        const result = await executeQueryWithContext(`
-            INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id, no_hp_pic, alamat_pic, kelurahan_pic)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
-        `, [opdId, nama_kader, deskripsi || null, pic || null, nik_pic, userId, no_hp_pic || null, alamat_pic || null, kelurahan_pic || null], req.user);
+        // ── INSERT pic_kader ──
+        await client.query(
+            `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status)
+             VALUES ($1, $2, CURRENT_DATE, 'Aktif')`,
+            [relawanId, kaderId]
+        );
 
+        await client.query('COMMIT');
         res.status(201).json({
             success: true,
-            message: `Kader berhasil ditambahkan. Akun login PIC dibuat dengan NIK: ${nik_pic}`,
-            data: result.rows[0]
+            message: `Kader berhasil ditambahkan dengan PIC (NIK: ${nik_pic})`,
+            data: kaderRes.rows[0]
         });
     } catch (error: any) {
+        await client.query('ROLLBACK');
         console.error('Error in createKaderByOpd:', error);
         res.status(500).json({ success: false, message: 'Server error', error_dev: error.message });
+    } finally {
+        client.release();
     }
 };
 
@@ -420,10 +562,10 @@ export const updateKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
     try {
         const opdId = req.opd_id;
         const kaderId = parseInt(req.params.id as string);
-        const { nama_kader, deskripsi, pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
+        const { nama_kader, deskripsi } = req.body;
 
         const findQuery = await executeQueryWithContext(
-            `SELECT * FROM kader WHERE kader_id = $1 AND opd_id = $2`, [kaderId, opdId], req.user
+            `SELECT kader_id FROM kader WHERE kader_id = $1 AND opd_id = $2`, [kaderId, opdId], req.user
         );
         if (findQuery.rows.length === 0) {
             res.status(404).json({ success: false, message: 'Kader tidak ditemukan di instansi Anda' });
@@ -431,9 +573,9 @@ export const updateKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
         }
 
         const result = await executeQueryWithContext(`
-            UPDATE kader SET nama_kader = $1, deskripsi = $2, pic = $3, no_hp_pic = $4, alamat_pic = $5, kelurahan_pic = $6, updated_at = CURRENT_TIMESTAMP
-            WHERE kader_id = $7 RETURNING *
-        `, [nama_kader, deskripsi || null, pic || null, no_hp_pic || null, alamat_pic || null, kelurahan_pic || null, kaderId], req.user);
+            UPDATE kader SET nama_kader = $1, deskripsi = $2, updated_at = CURRENT_TIMESTAMP
+            WHERE kader_id = $3 RETURNING kader_id, nama_kader, deskripsi
+        `, [nama_kader, deskripsi || null, kaderId], req.user);
 
         res.status(200).json({ success: true, message: 'Data kader berhasil diperbarui', data: result.rows[0] });
     } catch (error: any) {
@@ -448,7 +590,7 @@ export const deleteKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
         const kaderId = parseInt(req.params.id as string);
 
         const findQuery = await executeQueryWithContext(
-            `SELECT user_id FROM kader WHERE kader_id = $1 AND opd_id = $2`, [kaderId, opdId], req.user
+            `SELECT kader_id FROM kader WHERE kader_id = $1 AND opd_id = $2`, [kaderId, opdId], req.user
         );
         if (findQuery.rows.length === 0) {
             res.status(404).json({ success: false, message: 'Kader tidak ditemukan' });
@@ -459,11 +601,17 @@ export const deleteKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
         res.status(200).json({ success: true, message: 'Kader berhasil dihapus' });
     } catch (error: any) {
         console.error('Error in deleteKaderByOpd:', error);
+        if (error.code === '23503') {
+            res.status(400).json({ success: false, message: 'Kader tidak dapat dihapus karena masih memiliki relawan aktif' });
+            return;
+        }
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };
 
-// Pastikan bcrypt dan pool (db) sudah di-import di atas file ini
+// ============================================================
+// BULK CREATE OPD — dipakai via /api/opd-admin/kader/bulk
+// ============================================================
 
 export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     const data = req.body;
@@ -531,26 +679,53 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
             try {
                 await client.query('BEGIN');
 
-                const checkNik = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nikPic]);
-                if (checkNik.rows.length > 0) {
-                    skipped.push(`"${namaKader}" (NIK PIC sudah terdaftar)`);
-                    await client.query('ROLLBACK');
-                    continue;
+                // ── Cari atau buat relawan dari NIK PIC ──
+                let relawanId: number;
+                const checkUser = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nikPic]);
+
+                if (checkUser.rows.length > 0) {
+                    const userId = checkUser.rows[0].user_id;
+                    const checkRelawan = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
+                    if (checkRelawan.rows.length > 0) {
+                        relawanId = checkRelawan.rows[0].relawan_id;
+                    } else {
+                        const relawanRes = await client.query(
+                            `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                             VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
+                            [userId, alamatPic || '-', kelurahanPic || '-']
+                        );
+                        relawanId = relawanRes.rows[0].relawan_id;
+                    }
+                } else {
+                    const bcrypt = await import('bcrypt');
+                    const salt = await bcrypt.genSalt(10);
+                    const hashedPassword = await bcrypt.hash(nikPic, salt);
+                    const userRes = await client.query(
+                        `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                         VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
+                        [nikPic, pic || '-', noHpPic || null, hashedPassword]
+                    );
+                    const userId = userRes.rows[0].user_id;
+                    const relawanRes = await client.query(
+                        `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                         VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
+                        [userId, alamatPic || '-', kelurahanPic || '-']
+                    );
+                    relawanId = relawanRes.rows[0].relawan_id;
                 }
 
-                const salt = await bcrypt.genSalt(10);
-                const hashedPassword = await bcrypt.hash(nikPic, salt);
-                const userRes = await client.query(
-                    `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
-                     VALUES ($1, $2, $3, 'relawan', true) RETURNING user_id`,
-                    [nikPic, pic || namaKader, hashedPassword]
+                // ── INSERT kader (tanpa kolom PIC) ──
+                const kaderRes = await client.query(
+                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, is_active) VALUES ($1, $2, $3, true) RETURNING kader_id`,
+                    [opdId, namaKader, deskripsi]
                 );
-                const userId = userRes.rows[0].user_id;
+                const kaderId = kaderRes.rows[0].kader_id;
 
+                // ── INSERT pic_kader ──
                 await client.query(
-                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, pic, nik_pic, user_id, is_active, no_hp_pic, alamat_pic, kelurahan_pic)
-                     VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9)`,
-                    [opdId, namaKader, deskripsi, pic, nikPic, userId, noHpPic, alamatPic, kelurahanPic]
+                    `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status)
+                     VALUES ($1, $2, CURRENT_DATE, 'Aktif')`,
+                    [relawanId, kaderId]
                 );
 
                 await client.query('COMMIT');
@@ -576,5 +751,124 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
         res.status(500).json({ success: false, message: 'Terjadi kesalahan server saat import Excel' });
     } finally {
         client.release();
+    }
+};
+
+// ============================================================
+// ASSIGN PIC & HISTORI — dipakai oleh super_admin & opd
+// ============================================================
+
+export const assignPicKader = async (req: AuthRequest, res: Response): Promise<void> => {
+    const kaderId = parseInt(req.params.id as string);
+    const { nik_pic, nama_pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
+
+    if (!nik_pic) {
+        res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
+        return;
+    }
+    if (String(nik_pic).length !== 16) {
+        res.status(400).json({ success: false, message: 'NIK PIC harus 16 digit' });
+        return;
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Cek kader ada
+        const kaderCheck = await client.query(`SELECT kader_id FROM kader WHERE kader_id = $1`, [kaderId]);
+        if (kaderCheck.rows.length === 0) {
+            await client.query('ROLLBACK');
+            res.status(404).json({ success: false, message: 'Kader tidak ditemukan' });
+            return;
+        }
+
+        // ── Cari atau buat relawan dari NIK PIC ──
+        let relawanId: number;
+        const checkUser = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nik_pic]);
+
+        if (checkUser.rows.length > 0) {
+            const userId = checkUser.rows[0].user_id;
+            const checkRelawan = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
+            if (checkRelawan.rows.length > 0) {
+                relawanId = checkRelawan.rows[0].relawan_id;
+            } else {
+                const relawanRes = await client.query(
+                    `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                     VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
+                    [userId, alamat_pic || '-', kelurahan_pic || '-']
+                );
+                relawanId = relawanRes.rows[0].relawan_id;
+            }
+        } else {
+            const bcrypt = await import('bcrypt');
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(String(nik_pic), salt);
+            const userRes = await client.query(
+                `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                 VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
+                [nik_pic, nama_pic || '-', no_hp_pic || null, hashedPassword]
+            );
+            const userId = userRes.rows[0].user_id;
+            const relawanRes = await client.query(
+                `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
+                 VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
+                [userId, alamat_pic || '-', kelurahan_pic || '-']
+            );
+            relawanId = relawanRes.rows[0].relawan_id;
+        }
+
+        // ── Nonaktifkan PIC lama ──
+        await client.query(
+            `UPDATE pic_kader
+             SET status = 'Tidak Aktif', tanggal_selesai = CURRENT_DATE
+             WHERE kader_id = $1 AND status = 'Aktif'`,
+            [kaderId]
+        );
+
+        // ── Insert PIC baru ──
+        await client.query(
+            `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status)
+             VALUES ($1, $2, CURRENT_DATE, 'Aktif')`,
+            [relawanId, kaderId]
+        );
+
+        await client.query('COMMIT');
+        res.status(200).json({ success: true, message: `PIC kader berhasil diganti (NIK baru: ${nik_pic})` });
+    } catch (error: any) {
+        await client.query('ROLLBACK');
+        console.error('Error in assignPicKader:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server', error_dev: error.message });
+    } finally {
+        client.release();
+    }
+};
+
+export const getPicKaderHistory = async (req: AuthRequest, res: Response): Promise<void> => {
+    const kaderId = parseInt(req.params.id as string);
+    try {
+        const result = await executeQueryWithContext(`
+            SELECT
+                pk.pic_kader_id,
+                pk.kader_id,
+                pk.relawan_id,
+                pk.tanggal_mulai,
+                pk.tanggal_selesai,
+                pk.status,
+                pk.created_at,
+                u.nama_lengkap  AS pic_nama,
+                u.nik           AS pic_nik,
+                u.no_hp         AS pic_no_hp
+            FROM pic_kader pk
+            JOIN relawan r ON pk.relawan_id = r.relawan_id
+            JOIN users u   ON r.user_id = u.user_id
+            WHERE pk.kader_id = $1
+            ORDER BY pk.created_at DESC
+        `, [kaderId], req.user);
+
+        res.status(200).json({ success: true, data: result.rows });
+    } catch (error: any) {
+        console.error('Error in getPicKaderHistory:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server' });
     }
 };
