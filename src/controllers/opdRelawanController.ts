@@ -61,7 +61,7 @@ export const getSkByOpd = async (req: OpdAuthRequest, res: Response): Promise<vo
 
 // 3. Tambah Relawan Manual Khusus OPD (1 Penugasan saja)
 export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
-    const opdId = req.opd_id; // 🔒 Paksa gunakan OPD ID dari token
+    const opdId = req.opd_id; //  Paksa gunakan OPD ID dari token
 
     const nama_lengkap = req.body.nama_lengkap || req.body.namaLengkap || req.body.namaRelawan;
     const nik = req.body.nik;
@@ -70,8 +70,8 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
     const jenis_kelamin = req.body.jenis_kelamin || req.body.jenisKelamin || 'L';
     const no_hp = req.body.no_hp || req.body.noHp || null;
 
-    const assignment = req.body.assignments && req.body.assignments.length > 0 
-        ? req.body.assignments[0] 
+    const assignment = req.body.assignments && req.body.assignments.length > 0
+        ? req.body.assignments[0]
         : req.body;
 
     const kaderText = assignment.kader || assignment.kader_kader;
@@ -148,7 +148,7 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
 // 4. Tambah Relawan Excel Khusus OPD (Bulk - FIXED VERSION)
 export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     const rawData = req.body;
-    const opdId = req.opd_id; // 🔒 Paksa gunakan OPD ID dari token
+    const opdId = req.opd_id; //  Paksa gunakan OPD ID dari token
 
     if (!Array.isArray(rawData) || rawData.length === 0) {
         res.status(400).json({ success: false, message: 'Data yang dikirim harus berupa array yang tidak kosong' });
@@ -157,6 +157,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
 
     const client = await pool.connect();
     let insertedCount = 0;
+    let updatedCount = 0;
     const errors: string[] = [];
 
     try {
@@ -198,7 +199,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                 let relawanId: number;
 
                 const checkRes = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nik]);
-                
+
                 if (checkRes.rows.length > 0) {
                     userId = checkRes.rows[0].user_id;
                     const getRelawan = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
@@ -216,7 +217,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                 } else {
                     const salt = await bcrypt.genSalt(10);
                     const hashedPassword = await bcrypt.hash(nik, salt);
-                    
+
                     const userRes = await client.query(
                         `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
                          VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
@@ -241,8 +242,8 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                     );
                     if (kaderLookup.rows.length > 0) kaderId = kaderLookup.rows[0].kader_id;
                 }
-                
-                // ✅ FIXED: Menggunakan variabel 'peran' dan 'detail' dari ekstraksi Excel
+
+                //  FIXED: Menggunakan variabel 'peran' dan 'detail' dari ekstraksi Excel
                 const checkPenugasan = await client.query(
                     `SELECT penugasan_id FROM penugasan_relawan 
                      WHERE relawan_id = $1 
@@ -262,6 +263,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                          WHERE penugasan_id = $3`,
                         [detail || null, 'Aktif', checkPenugasan.rows[0].penugasan_id]
                     );
+                    updatedCount++;
                 } else {
                     // INSERT new penugasan
                     await client.query(
@@ -270,10 +272,10 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                          VALUES ($1, $2, $3, $4, $5, 'Aktif')`,
                         [relawanId, opdId, kaderId, peran || null, detail || null]
                     );
+                    insertedCount++;
                 }
 
                 await client.query('COMMIT');
-                insertedCount++;
 
             } catch (rowError: any) {
                 await client.query('ROLLBACK');
@@ -282,13 +284,17 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
             }
         }
 
-        const parts: string[] = [`Berhasil menambahkan/memperbarui ${insertedCount} penugasan relawan.`];
-        if (errors.length > 0) parts.push(`Ada ${errors.length} peringatan/error (cek detail).`);
+        const parts: string[] = [];
+        if (insertedCount > 0) parts.push(`Berhasil menambahkan ${insertedCount} data baru.`);
+        if (updatedCount > 0) parts.push(`Berhasil mengupdate ${updatedCount} data.`);
+        if (errors.length > 0) parts.push(`Ada ${errors.length} peringatan/error.`);
 
-        res.status(insertedCount > 0 ? 201 : 400).json({
-            success: insertedCount > 0,
-            message: parts.join(' '),
-            data: { insertedCount, errors }
+        const totalSuccess = insertedCount + updatedCount;
+
+        res.status(totalSuccess > 0 ? 201 : 400).json({
+            success: totalSuccess > 0,
+            message: parts.join('\n') || 'Tidak ada data yang diproses',
+            data: { insertedCount, updatedCount, errors }
         });
 
     } catch (fatalError: any) {
@@ -344,7 +350,7 @@ export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
                          SET kader_id = $1, jabatan = $2, detail_jabatan = $3, status_keaktifan = $4, updated_at = CURRENT_TIMESTAMP
                          WHERE penugasan_id = $5 AND opd_id = $6`,
                         [assign.kader_id || null, assign.peran || null, assign.detail || null,
-                         assign.statusKeaktifan || 'Aktif', assign.penugasan_id, opdId]
+                        assign.statusKeaktifan || 'Aktif', assign.penugasan_id, opdId]
                     );
                 } else {
                     // INSERT penugasan baru
@@ -352,7 +358,7 @@ export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
                         `INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, status_keaktifan)
                          VALUES ($1, $2, $3, $4, $5, $6)`,
                         [relawanId, opdId, assign.kader_id || null, assign.peran || null,
-                         assign.detail || null, assign.statusKeaktifan || 'Aktif']
+                            assign.detail || null, assign.statusKeaktifan || 'Aktif']
                     );
                 }
             }
