@@ -287,15 +287,13 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
 
                 let userId: number;
                 let relawanId: number;
-                let isExisting = false;
 
                 const checkRes = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [item.nik]);
-
                 if (checkRes.rows.length > 0) {
                     // ── NIK sudah ada → UPDATE profil ──────────────────────────
-                    isExisting = true;
                     userId = checkRes.rows[0].user_id;
-                    
+
+                    // UPDATE users — tidak ada RLS di tabel ini, selalu berhasil
                     await client.query(`
                         UPDATE users
                         SET nama_lengkap = $1,
@@ -305,19 +303,33 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     `, [item.namaLengkap, item.noHp, userId]);
 
                     const relawanCheck = await client.query(`SELECT relawan_id FROM relawan WHERE user_id = $1`, [userId]);
+
                     if (relawanCheck.rows.length > 0) {
                         relawanId = relawanCheck.rows[0].relawan_id;
-                        await client.query(`
+
+                        // UPDATE relawan — super_admin punya full RLS access, ini selalu berhasil
+                        const updateR = await client.query(`
                             UPDATE relawan
-                            SET jenis_kelamin = $1, alamat_ktp = $2, kelurahan = $3, updated_at = CURRENT_TIMESTAMP
+                            SET jenis_kelamin = $1,
+                                alamat_ktp   = $2,
+                                kelurahan    = $3,
+                                updated_at   = CURRENT_TIMESTAMP
                             WHERE relawan_id = $4
+                            RETURNING relawan_id
                         `, [item.jenisKelamin, item.alamat, item.kelurahan, relawanId]);
+
+                        if ((updateR.rowCount ?? 0) > 0) {
+                            updatedProfileCount++;
+                        } else {
+                            errors.push(`Baris ${rowNumber}: Profil '${item.namaLengkap}' gagal diperbarui (RLS/permission).`);
+                        }
                     } else {
                         const r = await client.query(`
                             INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
                             VALUES ($1,$2,$3,$4) RETURNING relawan_id
                         `, [userId, item.jenisKelamin, item.alamat, item.kelurahan]);
                         relawanId = r.rows[0].relawan_id;
+                        updatedProfileCount++;
                     }
                 } else {
                     // ── NIK baru → INSERT user + relawan ───────────────────────
@@ -389,14 +401,11 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                 }
 
                 // Hitung profil yang diperbarui (hanya jika NIK sudah ada sebelumnya)
-                if (isExisting) {
-                    updatedProfileCount++;
-                } else if (!penugasanProcessed) {
-                    // NIK baru tapi penugasan tidak terproses → tetap hitung sebagai inserted
+                if (checkRes.rows.length === 0 && !penugasanProcessed) {
                     insertedCount++;
                 }
-
                 await client.query('COMMIT');
+                
             } catch (rowError: any) {
                 await client.query('ROLLBACK');
                 console.error(`Error row ${rowNumber} (${item.namaLengkap}):`, rowError);
