@@ -1,3 +1,4 @@
+//relawanProfileController
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { RelawanAuthRequest } from '../middleware/relawanMiddleware';
@@ -7,9 +8,8 @@ export const getMyProfile = async (req: RelawanAuthRequest, res: Response): Prom
     try {
         const result = await executeQueryWithContext(`
             SELECT 
-                u.nik, u.nama_lengkap, u.email, u.no_hp,
-                r.jenis_kelamin, r.tempat_lahir, r.tanggal_lahir, 
-                r.alamat_ktp, r.alamat_domisili, r.kelurahan
+                u.nik, u.nama_lengkap, u.no_hp,
+                r.jenis_kelamin, r.alamat_ktp, r.kelurahan
             FROM relawan r
             JOIN users u ON r.user_id = u.user_id
             WHERE r.relawan_id = $1
@@ -68,5 +68,26 @@ export const requestProfileUpdate = async (req: RelawanAuthRequest, res: Respons
     } catch (error: any) {
         console.error('Error in requestProfileUpdate:', error);
         res.status(500).json({ success: false, message: 'Server error saat mengirim pengajuan.' });
+    }
+};
+
+export const getMyPenugasan = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
+    try {
+        const result = await executeQueryWithContext(`
+            SELECT 
+                pr.penugasan_id, pr.jabatan, pr.detail_jabatan, 
+                pr.status_keaktifan, pr.nomor_sk_manual,
+                o.nama_opd, k.nama_kader
+            FROM penugasan_relawan pr
+            JOIN opd o ON pr.opd_id = o.opd_id
+            LEFT JOIN kader k ON pr.kader_id = k.kader_id
+            WHERE pr.relawan_id = $1
+            ORDER BY pr.created_at DESC
+        `, [req.relawan_id], req.user);
+
+        res.status(200).json({ success: true, data: result.rows });
+    } catch (error: any) {
+        console.error('Error in getMyPenugasan:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 };

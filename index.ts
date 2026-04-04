@@ -1,3 +1,4 @@
+//index.ts
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -5,7 +6,6 @@ import dotenv from 'dotenv';
 // Import Routes
 import authRoutes from './src/routes/authRoutes';
 import relawanRoutes from './src/routes/relawanRoutes';
-import bpjsRoutes from './src/routes/bpjsRoutes';
 import opdRoutes from './src/routes/opdRoutes';
 import relawanAdminRoutes from './src/routes/relawanAdminRoutes';
 import skRoutes from './src/routes/skRoutes';
@@ -13,6 +13,10 @@ import dashboardRoutes from './src/routes/dashboardRoutes';
 import logRoutes from './src/routes/logRoutes';
 import opdAdminRoutes from './src/routes/opdAdminRoutes';
 import debugRoutes from './src/routes/debugRoutes';
+import saranRoutes from './src/routes/saranRoutes';
+import kaderRoutes from './src/routes/kaderRoutes';
+import profileRoutes from './src/routes/profileRoutes';
+import statistikRoutes from './src/routes/statistikRoutes';
 
 dotenv.config();
 
@@ -23,16 +27,19 @@ app.use(cors());
 app.use(express.json());
 
 // === DAFTAR ROUTES (API MAP) ===
-app.use('/api/auth', authRoutes);       // http://localhost:3000/api/auth
-app.use('/api/relawan', relawanRoutes); // http://localhost:3000/api/relawan
-app.use('/api/bpjs', bpjsRoutes);       // http://localhost:3000/api/bpjs
-app.use('/api/opd', opdRoutes);         // http://localhost:3000/api/opd
-app.use('/api/admin/relawan', relawanAdminRoutes); // http://localhost:3000/api/admin/relawan
-app.use('/api/admin/sk', skRoutes);     // http://localhost:3000/api/admin/sk
-app.use('/api/admin/dashboard', dashboardRoutes); // http://localhost:3000/api/admin/dashboard
-app.use('/api/admin/logs', logRoutes);  // http://localhost:3000/api/admin/logs
-app.use('/api/opd-admin', opdAdminRoutes); // http://localhost:3000/api/opd-admin
-app.use('/api/debug', debugRoutes); // http://localhost:3000/api/debug
+app.use('/api/auth', authRoutes);       
+app.use('/api/relawan', relawanRoutes);
+app.use('/api/opd', opdRoutes);        
+app.use('/api/admin/relawan', relawanAdminRoutes);
+app.use('/api/admin/sk', skRoutes);     
+app.use('/api/admin/dashboard', dashboardRoutes); 
+app.use('/api/admin/logs', logRoutes);  
+app.use('/api/opd-admin', opdAdminRoutes); 
+app.use('/api/saran', saranRoutes);        
+app.use('/api/kader', kaderRoutes); 
+app.use('/api/debug', debugRoutes); 
+app.use('/api/profile', profileRoutes);
+app.use('/api/statistik', statistikRoutes);
 
 // Test Root
 app.get('/', (req: Request, res: Response) => {

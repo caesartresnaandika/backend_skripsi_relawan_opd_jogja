@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
+import { OpdAuthRequest } from '../middleware/opdMiddleware';
 
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -27,9 +28,9 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
                 SELECT COUNT(*) as total FROM opd WHERE is_active = true
             `, [], req.user),
 
-            // 3. Total Kader/Komunitas
+            // 3. Total Kader/kader
             executeQueryWithContext(`
-                SELECT COUNT(*) as total FROM komunitas
+                SELECT COUNT(*) as total FROM kader
             `, [], req.user),
 
             // 4. Pengajuan Menunggu Review
@@ -105,5 +106,49 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
     } catch (error: any) {
         console.error('Error in getDashboardStats:', error);
         res.status(500).json({ success: false, message: 'Terjadi kesalahan saat menghitung statistik server' });
+    }
+};
+
+export const getOpdDashboardStats = async (req: OpdAuthRequest, res: Response): Promise<void> => {
+    try {
+        const opdId = req.opd_id;
+        const [totalRelawanRes, totalKaderRes, relawanPerKaderRes, opdInfoRes] = await Promise.all([
+            executeQueryWithContext(`
+                SELECT COUNT(DISTINCT pr.relawan_id) as total 
+                FROM penugasan_relawan pr 
+                JOIN users u ON pr.relawan_id = (SELECT relawan_id FROM relawan WHERE user_id = u.user_id LIMIT 1)
+                WHERE pr.opd_id = $1 AND pr.status_keaktifan = 'Aktif' AND u.is_active = true
+            `, [opdId], req.user),
+            executeQueryWithContext(`SELECT COUNT(*) as total FROM kader WHERE opd_id = $1 AND is_active = true`, [opdId], req.user),
+            executeQueryWithContext(`
+                SELECT k.nama_kader, COUNT(pr.relawan_id) as jumlah_relawan
+                FROM kader k
+                LEFT JOIN penugasan_relawan pr ON k.kader_id = pr.kader_id AND pr.status_keaktifan = 'Aktif'
+                WHERE k.opd_id = $1
+                GROUP BY k.kader_id, k.nama_kader
+                ORDER BY jumlah_relawan DESC
+            `, [opdId], req.user),
+            executeQueryWithContext(`SELECT nama_opd FROM opd WHERE opd_id = $1`, [opdId], req.user)
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                nama_opd: opdInfoRes.rows[0]?.nama_opd || 'Instansi',
+                ringkasan: {
+                    total_relawan_aktif: parseInt(totalRelawanRes.rows[0].total, 10),
+                    total_kader: parseInt(totalKaderRes.rows[0].total, 10),
+                    pengajuan_pending: 0, // OPD belum ada fitur review pengajuan
+                    total_opd: 1 
+                },
+                grafik_relawan_per_opd: relawanPerKaderRes.rows.map(row => ({
+                    nama_opd: row.nama_kader, // Kita pinjam properti ini agar chart frontend tetap jalan
+                    jumlah_relawan: parseInt(row.jumlah_relawan, 10)
+                }))
+            }
+        });
+    } catch (error: any) {
+        console.error('Error in getOpdDashboardStats:', error);
+        res.status(500).json({ success: false, message: 'Gagal memuat statistik OPD' });
     }
 };

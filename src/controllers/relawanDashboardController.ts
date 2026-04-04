@@ -18,12 +18,11 @@ export const getRelawanDashboardStats = async (req: RelawanAuthRequest, res: Res
                 WHERE relawan_id = $1 AND status_keaktifan = 'Aktif'
             `, [relawanId], req.user),
 
-            // 2. Total Kegiatan (Menghitung dari tabel kegiatan yang pernah dia lakukan)
+            // 2. Total Kegiatan (Menghitung dari tabel kegiatan yang pernah dia lakukan
             executeQueryWithContext(`
-                SELECT COUNT(kr.kegiatan_id) as total 
-                FROM kegiatan_relawan kr
-                JOIN penugasan_relawan pr ON kr.penugasan_id = pr.penugasan_id
-                WHERE pr.relawan_id = $1 AND kr.status_penyelesaian = 'Selesai'
+                SELECT COUNT(*) as total 
+                FROM penugasan_relawan
+                WHERE relawan_id = $1
             `, [relawanId], req.user),
 
             // 3. Info Penugasan Aktif Saat Ini (Menampilkan Detail SK & Instansi)
@@ -31,11 +30,11 @@ export const getRelawanDashboardStats = async (req: RelawanAuthRequest, res: Res
                 SELECT 
                     sk.nomor_sk, sk.judul_sk, sk.batas_aktif, sk.file_path,
                     o.nama_opd,
-                    k.nama_komunitas as peran_kader
+                    k.nama_kader as peran_kader
                 FROM penugasan_relawan pr
-                JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id
+                LEFT JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id   
                 JOIN opd o ON pr.opd_id = o.opd_id
-                LEFT JOIN komunitas k ON pr.komunitas_id = k.komunitas_id
+                LEFT JOIN kader k ON pr.kader_id = k.kader_id
                 WHERE pr.relawan_id = $1 AND pr.status_keaktifan = 'Aktif'
                 LIMIT 1
             `, [relawanId], req.user)
