@@ -27,18 +27,18 @@ app.use(cors());
 app.use(express.json());
 
 // === DAFTAR ROUTES (API MAP) ===
-app.use('/api/auth', authRoutes);       // http://localhost:3000/api/auth
-app.use('/api/relawan', relawanRoutes); // http://localhost:3000/api/relawan      // http://localhost:3000/api/bpjs
-app.use('/api/opd', opdRoutes);         // http://localhost:3000/api/opd
-app.use('/api/admin/relawan', relawanAdminRoutes); // http://localhost:3000/api/admin/relawan
-app.use('/api/admin/sk', skRoutes);     // http://localhost:3000/api/admin/sk
-app.use('/api/admin/dashboard', dashboardRoutes); // http://localhost:3000/api/admin/dashboard
-app.use('/api/admin/logs', logRoutes);  // http://localhost:3000/api/admin/logs
-app.use('/api/opd-admin', opdAdminRoutes); // http://localhost:3000/api/opd-admin
-app.use('/api/saran', saranRoutes);         // http://localhost:3000/api/saran
-app.use('/api/kader', kaderRoutes); // http://localhost:3000/api/kader
-app.use('/api/debug', debugRoutes); // http://localhost:3000/api/debug
-app.use('/api/profile', profileRoutes); //untuk handler profile
+app.use('/api/auth', authRoutes);       
+app.use('/api/relawan', relawanRoutes);
+app.use('/api/opd', opdRoutes);        
+app.use('/api/admin/relawan', relawanAdminRoutes);
+app.use('/api/admin/sk', skRoutes);     
+app.use('/api/admin/dashboard', dashboardRoutes); 
+app.use('/api/admin/logs', logRoutes);  
+app.use('/api/opd-admin', opdAdminRoutes); 
+app.use('/api/saran', saranRoutes);        
+app.use('/api/kader', kaderRoutes); 
+app.use('/api/debug', debugRoutes); 
+app.use('/api/profile', profileRoutes);
 app.use('/api/statistik', statistikRoutes);
 
 // Test Root
