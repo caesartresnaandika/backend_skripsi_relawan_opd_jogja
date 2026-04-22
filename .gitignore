@@ -15,7 +15,7 @@ build/
 
 # Database backup / SQL exports
 # (Melihat di gambar ada file db_relawan_opd_export.sql, sebaiknya diignore agar tidak berat)
-*.sql
+
 
 # Debug logs
 logs

@@ -54,4 +54,6 @@ router.get('/profile', relawanProfileController_1.getMyProfile);
 router.post('/profile/update', relawanProfileController_1.requestProfileUpdate);
 // 3. Riwayat / History
 router.get('/history', relawanHistoryController_1.getMyHistory);
+// 4. Penugasan
+router.get('/penugasan', relawanProfileController_1.getMyPenugasan);
 exports.default = router;

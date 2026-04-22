@@ -1,4 +1,5 @@
 "use strict";
+// authMiddleware.ts
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -16,7 +17,17 @@ const verifyToken = (req, res, next) => {
     }
     try {
         const verified = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'rahasia_skripsi_caesar');
-        req.user = verified;
+        // ✅ FIXED: Type assertion untuk JWT payload
+        const decoded = verified;
+        // Coba tangkap IP dari Railway proxy atau direct socket
+        let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
+        if (Array.isArray(clientIp)) {
+            clientIp = clientIp[0];
+        }
+        else if (typeof clientIp === 'string') {
+            clientIp = clientIp.split(',')[0].trim();
+        }
+        req.user = Object.assign(Object.assign({}, decoded), { ip: clientIp });
         next();
     }
     catch (err) {
@@ -26,7 +37,7 @@ const verifyToken = (req, res, next) => {
 // === MIDDLEWARE KHUSUS RBAC (ROLE-BASED ACCESS CONTROL) ===
 const authorizeRole = (...allowedRoles) => {
     return (req, res, next) => {
-        // Pastikan verifyToken sudah dijalankan sebelumnya sehingga req.user ada
+        // Memastikan verifyToken sudah dijalankan sebelumnya sehingga req.user ada
         if (!req.user || !req.user.role) {
             res.status(403).json({ message: 'Akses Ditolak! Role tidak ditemukan.' });
             return;

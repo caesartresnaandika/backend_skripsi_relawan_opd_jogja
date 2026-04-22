@@ -13,6 +13,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.executeQueryWithContext = void 0;
+//db.ts
 const pg_1 = require("pg");
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
@@ -36,9 +37,14 @@ const executeQueryWithContext = (queryText_1, ...args_1) => __awaiter(void 0, [q
     try {
         yield client.query('BEGIN'); // Mulai transaksi
         if (userContext && userContext.id) {
-            // Gunakan set_config() alih-alih SET LOCAL karena SET LOCAL tidak mendukung parameter binding ($1)
             yield client.query("SELECT set_config('app.current_user_id', $1, true);", [userContext.id.toString()]);
             yield client.query("SELECT set_config('app.current_user_role', $1, true);", [userContext.role]);
+            // Tambah baris ini untuk mendukung policy opd_access_kader:
+            const opdId = userContext.opd_id;
+            yield client.query("SELECT set_config('app.current_opd_id', $1, true);", [(opdId !== null && opdId !== void 0 ? opdId : 0).toString()]);
+            if (userContext.ip) {
+                yield client.query("SELECT set_config('app.current_user_ip', $1, true);", [userContext.ip]);
+            }
         }
         // Eksekusi query aslinya
         const result = yield client.query(queryText, params);
