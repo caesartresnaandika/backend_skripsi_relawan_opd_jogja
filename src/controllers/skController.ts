@@ -11,7 +11,13 @@ export const getAllSK = async (req: AuthRequest, res: Response): Promise<void> =
             SELECT 
                 sk.sk_id, sk.nomor_sk, sk.judul_sk, sk.tanggal_terbit, sk.batas_aktif, sk.status,
                 o.nama_opd, o.opd_id,
-                (SELECT COUNT(*) FROM penugasan_relawan pr WHERE pr.sk_id = sk.sk_id) AS jumlah_relawan,
+                (
+                    SELECT COUNT(DISTINCT relawan_id) FROM (
+                        SELECT relawan_id FROM penugasan_relawan WHERE sk_id = sk.sk_id
+                        UNION
+                        SELECT relawan_id FROM pic_kader WHERE sk_id = sk.sk_id
+                    ) AS gabungan_relawan
+                ) AS jumlah_relawan,
                 CASE WHEN sk.file_path IS NOT NULL THEN true ELSE false END AS has_file
             FROM surat_keputusan sk
             JOIN opd o ON sk.opd_id = o.opd_id
@@ -130,113 +136,114 @@ export const getOPDList = async (req: AuthRequest, res: Response): Promise<void>
     }
 };
 
-    // 5. Buat SK dengan Upload PDF (Base64) + Validasi Lengkap
-    export const createSK = async (req: AuthRequest, res: Response): Promise<void> => {
-        const { 
-            nomor_sk, 
-            judul_sk, 
-            tanggal_terbit, 
-            batas_aktif, 
-            daftar_relawan 
-        } = req.body;
+// 5. Buat SK dengan Upload PDF (Base64) + Validasi Lengkap
+export const createSK = async (req: AuthRequest, res: Response): Promise<void> => {
+    const {
+        nomor_sk,
+        judul_sk,
+        tanggal_terbit,
+        batas_aktif,
+        daftar_relawan
+    } = req.body;
 
+    // ============================================
+    // ✅ VALIDASI: File wajib ada (di awal fungsi!)
+    // ============================================
+    if (!req.file) {
+        res.status(400).json({
+            success: false,
+            message: 'File PDF SK wajib diunggah',
+            error_code: 'MISSING_FILE'
+        });
+        return;
+    }
+
+    const opd_id = req.user?.role === 'opd'
+        ? (req.user as any).opd_id
+        : req.body.opd_id;
+
+    if (!opd_id) {
+        res.status(400).json({
+            success: false,
+            message: 'OPD ID tidak valid atau tidak disertakan.',
+            error_code: 'MISSING_OPD_ID'
+        });
+        return;
+    }
+
+    const client = await pool.connect();
+
+    try {
         // ============================================
-        // ✅ VALIDASI: File wajib ada (di awal fungsi!)
+        // VALIDASI 1: OPD harus ada
         // ============================================
-        if (!req.file) {
+        const checkOPD = await client.query(
+            'SELECT opd_id, nama_opd FROM opd WHERE opd_id = $1 AND is_active = true',
+            [opd_id]
+        );
+
+        if (checkOPD.rows.length === 0) {
             res.status(400).json({
                 success: false,
-                message: 'File PDF SK wajib diunggah',
-                error_code: 'MISSING_FILE'
+                message: 'OPD tidak ditemukan atau tidak aktif',
+                error_code: 'OPD_NOT_FOUND',
+                hint: {
+                    title: 'Solusi:',
+                    steps: [
+                        'Buka menu "Manajemen OPD"',
+                        'Tambahkan OPD baru atau aktifkan OPD yang ada',
+                        'Kembali ke halaman ini dan upload SK lagi'
+                    ],
+                    link: '/manajemen-opd',
+                    link_text: 'Buka Manajemen OPD →'
+                }
             });
             return;
         }
 
-        const opd_id = req.user?.role === 'opd' 
-            ? (req.user as any).opd_id 
-            : req.body.opd_id;
+        // ============================================
+        // VALIDASI 2: Nomor SK harus unik
+        // ============================================
+        const checkNomorSK = await client.query(
+            'SELECT sk_id FROM surat_keputusan WHERE nomor_sk = $1',
+            [nomor_sk]
+        );
 
-        if (!opd_id) {
-            res.status(400).json({ 
-                success: false, 
-                message: 'OPD ID tidak valid atau tidak disertakan.',
-                error_code: 'MISSING_OPD_ID'
+        if (checkNomorSK.rows.length > 0) {
+            res.status(400).json({
+                success: false,
+                message: 'Nomor SK sudah terdaftar di sistem',
+                error_code: 'DUPLICATE_NOMOR_SK',
+                hint: {
+                    title: 'Solusi:',
+                    steps: [
+                        'Periksa kembali nomor SK',
+                        'Pastikan tidak ada duplikasi',
+                        'Gunakan nomor SK yang berbeda'
+                    ]
+                }
             });
             return;
         }
 
-        const client = await pool.connect();
+        // ============================================
+        // PROSES: Simpan SK ke Database
+        // ============================================
+        await client.query('BEGIN');
 
-        try {
-            // ============================================
-            // VALIDASI 1: OPD harus ada
-            // ============================================
-            const checkOPD = await client.query(
-                'SELECT opd_id, nama_opd FROM opd WHERE opd_id = $1 AND is_active = true', 
-                [opd_id]
-            );
-            
-            if (checkOPD.rows.length === 0) {
-                res.status(400).json({
-                    success: false,
-                    message: 'OPD tidak ditemukan atau tidak aktif',
-                    error_code: 'OPD_NOT_FOUND',
-                    hint: {
-                        title: 'Solusi:',
-                        steps: [
-                            'Buka menu "Manajemen OPD"',
-                            'Tambahkan OPD baru atau aktifkan OPD yang ada',
-                            'Kembali ke halaman ini dan upload SK lagi'
-                        ],
-                        link: '/manajemen-opd',
-                        link_text: 'Buka Manajemen OPD →'
-                    }
-                });
-                return;
-            }
+        if (req.user && req.user.id) {
+            await client.query("SELECT set_config('app.current_user_id', $1, true);", [req.user.id.toString()]);
+            await client.query("SELECT set_config('app.current_user_role', $1, true);", [req.user.role]);
+        }
 
-            // ============================================
-            // VALIDASI 2: Nomor SK harus unik
-            // ============================================
-            const checkNomorSK = await client.query(
-                'SELECT sk_id FROM surat_keputusan WHERE nomor_sk = $1', 
-                [nomor_sk]
-            );
-            
-            if (checkNomorSK.rows.length > 0) {
-                res.status(400).json({
-                    success: false,
-                    message: 'Nomor SK sudah terdaftar di sistem',
-                    error_code: 'DUPLICATE_NOMOR_SK',
-                    hint: {
-                        title: 'Solusi:',
-                        steps: [
-                            'Periksa kembali nomor SK',
-                            'Pastikan tidak ada duplikasi',
-                            'Gunakan nomor SK yang berbeda'
-                        ]
-                    }
-                });
-                return;
-            }
+        // ✅ FIXED: Gunakan ! operator (setelah null check di atas)
+        const base64File = req.file!.buffer.toString('base64');
+        const mimeType = req.file!.mimetype;
+        const base64String = `data:${mimeType};base64,${base64File}`;
 
-            // ============================================
-            // PROSES: Simpan SK ke Database
-            // ============================================
-            await client.query('BEGIN');
 
-            if (req.user && req.user.id) {
-                await client.query("SELECT set_config('app.current_user_id', $1, true);", [req.user.id.toString()]);
-                await client.query("SELECT set_config('app.current_user_role', $1, true);", [req.user.role]);
-            }
-
-            // ✅ FIXED: Gunakan ! operator (setelah null check di atas)
-            const base64File = req.file!.buffer.toString('base64');
-            const mimeType = req.file!.mimetype;
-            const base64String = `${mimeType};base64,${base64File}`;
-
-            // Simpan SK
-            const insertSKQuery = `
+        // Simpan SK
+        const insertSKQuery = `
                 INSERT INTO surat_keputusan (
                     nomor_sk, judul_sk, tanggal_terbit, batas_aktif, 
                     opd_id, file_path, status
@@ -244,73 +251,73 @@ export const getOPDList = async (req: AuthRequest, res: Response): Promise<void>
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                 RETURNING sk_id;
             `;
-            const skValues = [
-                nomor_sk, 
-                judul_sk || `Surat Keputusan ${nomor_sk}`, 
-                tanggal_terbit || null, 
-                batas_aktif || null, 
-                opd_id, 
-                base64String,
-                'Aktif'
-            ];
-            
-            const skResult = await client.query(insertSKQuery, skValues);
-            const new_sk_id = skResult.rows[0].sk_id;
+        const skValues = [
+            nomor_sk,
+            judul_sk || `Surat Keputusan ${nomor_sk}`,
+            tanggal_terbit || null,
+            batas_aktif || null,
+            opd_id,
+            base64String,
+            'Aktif'
+        ];
 
-            // ============================================
-            // PROSES: Link Relawan ke SK ini
-            // ============================================
-            const penugasanBerhasil = [];
-            const penugasanGagal = [];
+        const skResult = await client.query(insertSKQuery, skValues);
+        const new_sk_id = skResult.rows[0].sk_id;
 
-            if (daftar_relawan && Array.isArray(daftar_relawan) && daftar_relawan.length > 0) {
-                
-                for (const item of daftar_relawan) {
-                    try {
-                        // 1. Cari relawan berdasarkan NIK
-                        const checkRelawan = await client.query(`
+        // ============================================
+        // PROSES: Link Relawan ke SK ini
+        // ============================================
+        const penugasanBerhasil = [];
+        const penugasanGagal = [];
+
+        if (daftar_relawan && Array.isArray(daftar_relawan) && daftar_relawan.length > 0) {
+
+            for (const item of daftar_relawan) {
+                try {
+                    // 1. Cari relawan berdasarkan NIK
+                    const checkRelawan = await client.query(`
                             SELECT r.relawan_id, u.nama_lengkap, u.nik
                             FROM relawan r
                             JOIN users u ON r.user_id = u.user_id
                             WHERE u.nik = $1 AND u.role = 'relawan'
                         `, [item.nik]);
 
-                        if (checkRelawan.rows.length === 0) {
-                            penugasanGagal.push({
-                                nik: item.nik,
-                                nama: item.nama_lengkap || 'Tidak diketahui',
-                                error: 'Relawan tidak ditemukan'
-                            });
-                            continue;
-                        }
+                    if (checkRelawan.rows.length === 0) {
+                        penugasanGagal.push({
+                            nik: item.nik,
+                            nama: item.nama_lengkap || 'Tidak diketahui',
+                            error: 'Relawan tidak ditemukan'
+                        });
+                        continue;
+                    }
 
-                        const relawan_id = checkRelawan.rows[0].relawan_id;
+                    const relawan_id = checkRelawan.rows[0].relawan_id;
 
-                        // 2. Cari kader berdasarkan nama
-                        let kader_id = null;
-                        if (item.kader) {
-                            const checkKader = await client.query(`
+                    // 2. Cari kader berdasarkan nama
+                    let kader_id = null;
+                    if (item.kader) {
+                        const checkKader = await client.query(`
                                 SELECT kader_id FROM kader 
                                 WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) 
                                 AND opd_id = $2
                                 LIMIT 1
                             `, [item.kader, opd_id]);
 
-                            if (checkKader.rows.length > 0) {
-                                kader_id = checkKader.rows[0].kader_id;
-                            }
+                        if (checkKader.rows.length > 0) {
+                            kader_id = checkKader.rows[0].kader_id;
                         }
+                    }
 
-                        // 3. Cek apakah penugasan sudah ada
-                        const checkPenugasan = await client.query(`
+                    // 3. Cek apakah penugasan sudah ada
+                    const checkPenugasan = await client.query(`
                             SELECT penugasan_id FROM penugasan_relawan 
                             WHERE relawan_id = $1 AND opd_id = $2
                         `, [relawan_id, opd_id]);
 
-                        if (checkPenugasan.rows.length > 0) {
-                            // UPDATE existing
-                            const penugasan_id = checkPenugasan.rows[0].penugasan_id;
-                            await client.query(`
+                    if (checkPenugasan.rows.length > 0) {
+                        // UPDATE existing
+                        const penugasan_id = checkPenugasan.rows[0].penugasan_id;
+                        await client.query(`
                                 UPDATE penugasan_relawan 
                                 SET sk_id = $1,
                                     kader_id = COALESCE($2, kader_id),
@@ -320,16 +327,16 @@ export const getOPDList = async (req: AuthRequest, res: Response): Promise<void>
                                 WHERE penugasan_id = $4
                             `, [new_sk_id, kader_id, item.jabatan || null, penugasan_id]);
 
-                            penugasanBerhasil.push({
-                                nik: item.nik,
-                                nama: checkRelawan.rows[0].nama_lengkap,
-                                penugasan_id: penugasan_id,
-                                action: 'UPDATED'
-                            });
+                        penugasanBerhasil.push({
+                            nik: item.nik,
+                            nama: checkRelawan.rows[0].nama_lengkap,
+                            penugasan_id: penugasan_id,
+                            action: 'UPDATED'
+                        });
 
-                        } else {
-                            // INSERT new
-                            const insertRes = await client.query(`
+                    } else {
+                        // INSERT new
+                        const insertRes = await client.query(`
                                 INSERT INTO penugasan_relawan (
                                     relawan_id, opd_id, kader_id, sk_id, jabatan, status_keaktifan
                                 )
@@ -337,68 +344,68 @@ export const getOPDList = async (req: AuthRequest, res: Response): Promise<void>
                                 RETURNING penugasan_id
                             `, [relawan_id, opd_id, kader_id, new_sk_id, item.jabatan || null]);
 
-                            penugasanBerhasil.push({
-                                nik: item.nik,
-                                nama: checkRelawan.rows[0].nama_lengkap,
-                                penugasan_id: insertRes.rows[0].penugasan_id,
-                                action: 'INSERTED'
-                            });
-                        }
-
-                    } catch (error: any) {
-                        penugasanGagal.push({
+                        penugasanBerhasil.push({
                             nik: item.nik,
-                            nama: item.nama_lengkap || 'Tidak diketahui',
-                            error: error.message
+                            nama: checkRelawan.rows[0].nama_lengkap,
+                            penugasan_id: insertRes.rows[0].penugasan_id,
+                            action: 'INSERTED'
                         });
                     }
+
+                } catch (error: any) {
+                    penugasanGagal.push({
+                        nik: item.nik,
+                        nama: item.nama_lengkap || 'Tidak diketahui',
+                        error: error.message
+                    });
                 }
             }
-
-            await client.query('COMMIT');
-
-            res.status(201).json({
-                success: true,
-                message: 'Berhasil membuat Surat Keputusan',
-                data: {
-                    sk_id: new_sk_id,
-                    nomor_sk,
-                    file_size: `${(req.file!.size / 1024).toFixed(2)} KB`,  // ✅ Pakai ! operator
-                    total_relawan_ditugaskan: penugasanBerhasil.length,
-                    relawan_berhasil: penugasanBerhasil,
-                    relawan_gagal: penugasanGagal,
-                    note: daftar_relawan?.length === 0 ? 'SK tersimpan tanpa relawan. Gunakan endpoint link-relawan untuk menambahkan.' : ''
-                }
-            });
-
-        } catch (error: any) {
-            await client.query('ROLLBACK');
-            console.error('FULL ERROR in createSK:', error);
-
-            let errorMessage = 'Gagal menyimpan data SK.';
-            let errorCode = 'UNKNOWN_ERROR';
-
-            if (error.code === '23505') {
-                errorMessage = 'Nomor SK sudah terdaftar. Gunakan nomor yang berbeda.';
-                errorCode = 'DUPLICATE_NOMOR_SK';
-            } else if (error.code === '23503') {
-                errorMessage = 'Data referensi tidak ditemukan (OPD/Kader/Relawan).';
-                errorCode = 'FOREIGN_KEY_VIOLATION';
-            } else if (error.code) {
-                errorMessage += ` (PG Error: ${error.code})`;
-                errorCode = error.code;
-            }
-
-            res.status(400).json({ 
-                success: false, 
-                message: errorMessage,
-                error_code: errorCode,
-                dev_log: error.message 
-            });
-        } finally {
-            client.release();
         }
-    };
+
+        await client.query('COMMIT');
+
+        res.status(201).json({
+            success: true,
+            message: 'Berhasil membuat Surat Keputusan',
+            data: {
+                sk_id: new_sk_id,
+                nomor_sk,
+                file_size: `${(req.file!.size / 1024).toFixed(2)} KB`,  // ✅ Pakai ! operator
+                total_relawan_ditugaskan: penugasanBerhasil.length,
+                relawan_berhasil: penugasanBerhasil,
+                relawan_gagal: penugasanGagal,
+                note: daftar_relawan?.length === 0 ? 'SK tersimpan tanpa relawan. Gunakan endpoint link-relawan untuk menambahkan.' : ''
+            }
+        });
+
+    } catch (error: any) {
+        await client.query('ROLLBACK');
+        console.error('FULL ERROR in createSK:', error);
+
+        let errorMessage = 'Gagal menyimpan data SK.';
+        let errorCode = 'UNKNOWN_ERROR';
+
+        if (error.code === '23505') {
+            errorMessage = 'Nomor SK sudah terdaftar. Gunakan nomor yang berbeda.';
+            errorCode = 'DUPLICATE_NOMOR_SK';
+        } else if (error.code === '23503') {
+            errorMessage = 'Data referensi tidak ditemukan (OPD/Kader/Relawan).';
+            errorCode = 'FOREIGN_KEY_VIOLATION';
+        } else if (error.code) {
+            errorMessage += ` (PG Error: ${error.code})`;
+            errorCode = error.code;
+        }
+
+        res.status(400).json({
+            success: false,
+            message: errorMessage,
+            error_code: errorCode,
+            dev_log: error.message
+        });
+    } finally {
+        client.release();
+    }
+};
 
 // 6. Update Status SK
 export const updateSKStatus = async (req: AuthRequest, res: Response): Promise<void> => {
