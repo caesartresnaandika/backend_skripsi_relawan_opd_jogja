@@ -19,14 +19,15 @@ CREATE TABLE IF NOT EXISTS public.audit_logs
 
 CREATE TABLE IF NOT EXISTS public.kader
 (
-    kader_id integer NOT NULL DEFAULT nextval('komunitas_komunitas_id_seq'::regclass),
+    kader_id serial NOT NULL,
     opd_id integer NOT NULL,
     nama_kader character varying(100) COLLATE pg_catalog."default" NOT NULL,
     deskripsi text COLLATE pg_catalog."default",
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     is_active boolean DEFAULT true,
-    CONSTRAINT komunitas_pkey PRIMARY KEY (kader_id)
+    sk_id integer,
+    CONSTRAINT kader_pkey PRIMARY KEY (kader_id)
 );
 
 ALTER TABLE IF EXISTS public.kader
@@ -106,6 +107,7 @@ CREATE TABLE IF NOT EXISTS public.pic_kader
     tanggal_selesai date,
     status character varying(20) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Aktif'::character varying,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    sk_id integer,
     CONSTRAINT pic_kader_pkey PRIMARY KEY (pic_kader_id)
 );
 
@@ -181,6 +183,15 @@ ALTER TABLE IF EXISTS public.audit_logs
     REFERENCES public.users (user_id) MATCH SIMPLE
     ON UPDATE CASCADE
     ON DELETE SET NULL;
+
+
+ALTER TABLE IF EXISTS public.kader
+    ADD CONSTRAINT fk_kader_sk FOREIGN KEY (sk_id)
+    REFERENCES public.surat_keputusan (sk_id) MATCH SIMPLE
+    ON UPDATE CASCADE
+    ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_kader_sk_id
+    ON public.kader(sk_id);
 
 
 ALTER TABLE IF EXISTS public.kader
@@ -266,6 +277,15 @@ CREATE INDEX IF NOT EXISTS unique_active_pic_per_kader
 
 
 ALTER TABLE IF EXISTS public.pic_kader
+    ADD CONSTRAINT fk_pic_kader_sk FOREIGN KEY (sk_id)
+    REFERENCES public.surat_keputusan (sk_id) MATCH SIMPLE
+    ON UPDATE CASCADE
+    ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_pic_kader_sk_id
+    ON public.pic_kader(sk_id);
+
+
+ALTER TABLE IF EXISTS public.pic_kader
     ADD CONSTRAINT fk_pic_relawan FOREIGN KEY (relawan_id)
     REFERENCES public.relawan (relawan_id) MATCH SIMPLE
     ON UPDATE CASCADE
@@ -295,275 +315,3 @@ ALTER TABLE IF EXISTS public.surat_keputusan
     ON DELETE CASCADE;
 
 END;
-
--- Tambahan: Definisi Tipe Data ENUM (tidak terekspor otomatis)
-CREATE TYPE public.jabatan AS ENUM ('Ketua','Wakil','Sekretaris','Bendahara','Seksi','Anggota');
-CREATE TYPE public.jenis_kelamin AS ENUM ('L', 'P');
-CREATE TYPE public.status_keaktifan AS ENUM ('Aktif', 'Tidak Aktif', 'Cuti');
-CREATE TYPE public.status_kegiatan AS ENUM ('Berjalan', 'Selesai', 'Ditunda', 'Dibatalkan');
-CREATE TYPE public.status_pengajuan AS ENUM ('Menunggu Review', 'Diterima', 'Ditolak');
-CREATE TYPE public.status_saran AS ENUM ('Menunggu', 'Selesai');
-CREATE TYPE public.user_role AS ENUM ('super_admin', 'opd', 'relawan');
-
--- 1. Mengaktifkan RLS pada tabel-tabel penting
-ALTER TABLE public.opd ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.relawan ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.kegiatan_relawan ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.pengajuan_perubahan_data ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.penugasan_relawan ENABLE ROW LEVEL SECURITY;
-
--- 2. Menghapus policy lama jika ada (agar script ini aman dijalankan berulang kali)
-DROP POLICY IF EXISTS super_admin_all_opd ON public.opd;
-DROP POLICY IF EXISTS opd_relawan_select_opd ON public.opd;
-
-DROP POLICY IF EXISTS super_admin_all_relawan ON public.relawan;
-DROP POLICY IF EXISTS self_access_relawan ON public.relawan;
-
-DROP POLICY IF EXISTS super_admin_all_penugasan ON public.penugasan_relawan;
-DROP POLICY IF EXISTS self_access_penugasan ON public.penugasan_relawan;
-
-
--- ==========================================
--- 3. MEMBUAT POLICIES UNTUK TABEL: opd
--- ==========================================
--- [Super Admin]: Bebas melakukan CRUD ke tabel OPD
-CREATE POLICY super_admin_all_opd ON public.opd 
-    FOR ALL 
-    USING (current_setting('app.current_user_role', true) = 'super_admin');
-
--- [OPD & Relawan]: Hanya boleh melihat (SELECT) tabel OPD, tidak boleh mengedit/menghapus
-CREATE POLICY opd_relawan_select_opd ON public.opd
-    FOR SELECT 
-    USING (current_setting('app.current_user_role', true) IN ('opd', 'relawan'));
-
-
--- ==========================================
--- 4. MEMBUAT POLICIES UNTUK TABEL: relawan
--- ==========================================
--- [Super Admin]: Bebas melakukan CRUD ke tabel relawan
-CREATE POLICY super_admin_all_relawan ON public.relawan 
-    FOR ALL 
-    USING (current_setting('app.current_user_role', true) = 'super_admin');
-
--- [Relawan]: Hanya boleh melihat & mengedit profil aslinya sendiri (user_id miliknya)
-CREATE POLICY self_access_relawan ON public.relawan
-    FOR ALL
-    USING (user_id = current_setting('app.current_user_id', true)::integer);
-
-
--- ==========================================
--- 5. MEMBUAT POLICIES UNTUK TABEL: penugasan_relawan
--- ==========================================
--- [Super Admin]: Bebas akses
-CREATE POLICY super_admin_all_penugasan ON public.penugasan_relawan 
-    FOR ALL 
-    USING (current_setting('app.current_user_role', true) = 'super_admin');
-
--- [Relawan]: Hanya boleh melihat (SELECT) penugasannya sendiri
-CREATE POLICY self_access_penugasan ON public.penugasan_relawan
-    FOR SELECT
-    USING (relawan_id IN (
-        SELECT relawan_id FROM public.relawan WHERE user_id = current_setting('app.current_user_id', true)::integer
-    ));
-
-
--- ==========================================
--- CATATAN PENTING UNTUK QUERY BACKEND EXPRESS.JS
--- ==========================================
--- Mulai sekarang, setiap kali Node.js ingin melakukan query ke database, 
--- Node.js WAJIB mengirimkan context user terlebih dahulu. Contoh di kode Controller:
--- 
--- await pool.query("SET LOCAL app.current_user_id = $1;", [req.user.user_id]);
--- await pool.query("SET LOCAL app.current_user_role = $1;", [req.user.role]);
--- const result = await pool.query("SELECT * FROM opd");
---
--- RLS ini tidak mempengaruhi query yang dilakukan menggunakan user SUPERUSER postgres 
--- jika Role 'postgres' di-set dengan opsi BYPASSRLS.
--- Jika kamu memakai user 'postgres' di .env yang punya privileges Superuser, 
--- kamu perlu menggunakan perintah ALTER ROLE postgres NOSUPERUSER NOBYPASSRLS agar RLS bekerja,
--- atau buat user database baru seperti 'app_user' untuk backend kamu.
--- ==========================================
--- FIX RLS UNTUK TABEL: kader
--- ==========================================
-
--- 1. Aktifkan RLS pada tabel kader
-ALTER TABLE public.kader ENABLE ROW LEVEL SECURITY;
-
--- 2. Hapus policy lama jika ada
-DROP POLICY IF EXISTS super_admin_all_kader ON public.kader;
-DROP POLICY IF EXISTS opd_access_kader ON public.kader;
-DROP POLICY IF EXISTS relawan_access_kader ON public.kader;
-
--- 3. [Super Admin]: Bebas melakukan CRUD
-CREATE POLICY super_admin_all_kader ON public.kader 
-    FOR ALL 
-    USING (current_setting('app.current_user_role', true) = 'super_admin');
-
--- 4. [OPD]: Hanya boleh akses kader dari OPD mereka sendiri
-CREATE POLICY opd_access_kader ON public.kader 
-    FOR ALL 
-    USING (
-        current_setting('app.current_user_role', true) = 'opd' 
-        AND opd_id = current_setting('app.current_opd_id', true)::integer
-    );
-
--- 5. [Relawan]: Hanya boleh SELECT kader dari OPD mereka
-CREATE POLICY relawan_access_kader ON public.kader 
-    FOR SELECT 
-    USING (
-        current_setting('app.current_user_role', true) = 'relawan'
-        AND opd_id IN (
-            SELECT pr.opd_id 
-            FROM public.penugasan_relawan pr 
-            JOIN public.relawan r ON pr.relawan_id = r.relawan_id 
-            WHERE r.user_id = current_setting('app.current_user_id', true)::integer
-        )
-    );
-
-Membuatt aturan relawan dapat melihat data relawn di user mereka sendiri
-CREATE POLICY relawan_self_select ON relawan
-    FOR SELECT USING (true);  -- atau lebih ketat: user_id = current_user_id
-
-
-
--- Update RLS TERBARU
-DROP POLICY IF EXISTS super_admin_all_pengajuan ON public.pengajuan_perubahan_data;
-DROP POLICY IF EXISTS relawan_own_pengajuan ON public.pengajuan_perubahan_data;
-DROP POLICY IF EXISTS opd_all_pengajuan ON public.pengajuan_perubahan_data;
-
--- Super Admin: full access
-CREATE POLICY super_admin_all_pengajuan ON public.pengajuan_perubahan_data
-    FOR ALL
-    USING (current_setting('app.current_user_role', true) = 'super_admin');
-
--- OPD: bisa lihat dan update semua pengajuan
-CREATE POLICY opd_all_pengajuan ON public.pengajuan_perubahan_data
-    FOR ALL
-    USING (current_setting('app.current_user_role', true) = 'opd');
-
--- Relawan: hanya lihat pengajuan milik sendiri
-CREATE POLICY relawan_own_pengajuan ON public.pengajuan_perubahan_data
-    FOR SELECT
-    USING (
-        relawan_id IN (
-            SELECT relawan_id FROM public.relawan 
-            WHERE user_id = current_setting('app.current_user_id', true)::integer
-        )
-    );
-
-INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-SELECT 
-    u.user_id,
-    CASE 
-        WHEN u.nama_lengkap ILIKE '%siti%' 
-          OR u.nama_lengkap ILIKE '%dewi%' 
-          OR u.nama_lengkap ILIKE '%aminah%'
-          OR u.nama_lengkap ILIKE '%lestari%'
-        THEN 'P'
-        ELSE 'L'
-    END,
-    '-',
-    '-'
-FROM users u
-LEFT JOIN relawan r ON u.user_id = r.user_id
-WHERE u.role = 'relawan' 
-  AND r.relawan_id IS NULL;
-
-
-//CREATE_VIEW
-
--- public.vw_dashboard_statistik source
-
-CREATE OR REPLACE VIEW public.vw_dashboard_statistik
-AS SELECT 'total_opd'::text AS metric,
-    count(*)::text AS value
-   FROM opd
-  WHERE opd.opd_id IS NOT NULL
-UNION ALL
- SELECT 'total_relawan'::text AS metric,
-    count(*)::text AS value
-   FROM relawan r
-     JOIN users u ON r.user_id = u.user_id
-  WHERE u.is_active = true AND u.role = 'relawan'::user_role
-UNION ALL
- SELECT 'total_relawan_aktif'::text AS metric,
-    count(*)::text AS value
-   FROM penugasan_relawan pr
-  WHERE pr.status_keaktifan = 'Aktif'::status_keaktifan
-UNION ALL
- SELECT 'total_pengajuan_pending'::text AS metric,
-    count(*)::text AS value
-   FROM pengajuan_perubahan_data
-  WHERE pengajuan_perubahan_data.status = 'Menunggu Review'::status_pengajuan;
-
--- public.vw_komunitas_saya source
-
-CREATE OR REPLACE VIEW public.vw_komunitas_saya
-AS SELECT u.user_id,
-    r.relawan_id,
-    u.nama_lengkap,
-    k.kader_id,
-    k.nama_kader,
-    o.opd_id,
-    o.nama_opd,
-    pr.jabatan,
-    pr.status_keaktifan,
-    pr.nomor_sk_manual,
-    sk.nomor_sk AS sk_nomor,
-    sk.file_path AS sk_file
-   FROM users u
-     JOIN relawan r ON u.user_id = r.user_id
-     JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
-     JOIN kader k ON pr.kader_id = k.kader_id
-     JOIN opd o ON pr.opd_id = o.opd_id
-     LEFT JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id
-  WHERE u.role = 'relawan'::user_role AND u.is_active = true;
-
-  -- public.vw_relawan_per_opd source
-
-CREATE OR REPLACE VIEW public.vw_relawan_per_opd
-AS SELECT o.opd_id,
-    o.nama_opd,
-    count(pr.relawan_id) AS jumlah_relawan,
-    count(
-        CASE
-            WHEN pr.status_keaktifan = 'Aktif'::status_keaktifan THEN 1
-            ELSE NULL::integer
-        END) AS jumlah_relawan_aktif
-   FROM opd o
-     LEFT JOIN penugasan_relawan pr ON o.opd_id = pr.opd_id
-     LEFT JOIN relawan r ON pr.relawan_id = r.relawan_id
-     LEFT JOIN users u ON r.user_id = u.user_id
-  WHERE u.is_active = true OR u.is_active IS NULL
-  GROUP BY o.opd_id, o.nama_opd
-  ORDER BY (count(pr.relawan_id)) DESC;
-
-  -- public.vw_riwayat_pengajuan source
-
-CREATE OR REPLACE VIEW public.vw_riwayat_pengajuan
-AS SELECT pp.pengajuan_id,
-    u.user_id,
-    u.nama_lengkap,
-    r.relawan_id,
-    pp.jenis_perubahan,
-    pp.status,
-    pp.catatan_relawan,
-    pp.catatan_verifikator,
-    pp.tanggal_pengajuan,
-    pp.tanggal_verifikasi,
-    vu.nama_lengkap AS verifikator_nama
-   FROM pengajuan_perubahan_data pp
-     JOIN relawan r ON pp.relawan_id = r.relawan_id
-     JOIN users u ON r.user_id = u.user_id
-     LEFT JOIN users vu ON pp.verifikator_id = vu.user_id
-  ORDER BY pp.tanggal_pengajuan DESC;
-
-  -- public.vw_statistik_gender source
-
-CREATE OR REPLACE VIEW public.vw_statistik_gender
-AS SELECT r.jenis_kelamin AS gender,
-    count(*) AS jumlah
-   FROM relawan r
-     JOIN users u ON r.user_id = u.user_id
-  WHERE u.is_active = true
-  GROUP BY r.jenis_kelamin;

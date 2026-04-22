@@ -27,17 +27,17 @@ app.use(cors());
 app.use(express.json());
 
 // === DAFTAR ROUTES (API MAP) ===
-app.use('/api/auth', authRoutes);       
+app.use('/api/auth', authRoutes);
 app.use('/api/relawan', relawanRoutes);
-app.use('/api/opd', opdRoutes);        
+app.use('/api/opd', opdRoutes);
 app.use('/api/admin/relawan', relawanAdminRoutes);
-app.use('/api/admin/sk', skRoutes);     
-app.use('/api/admin/dashboard', dashboardRoutes); 
-app.use('/api/admin/logs', logRoutes);  
-app.use('/api/opd-admin', opdAdminRoutes); 
-app.use('/api/saran', saranRoutes);        
-app.use('/api/kader', kaderRoutes); 
-app.use('/api/debug', debugRoutes); 
+app.use('/api/admin/sk', skRoutes);
+app.use('/api/admin/dashboard', dashboardRoutes);
+app.use('/api/admin/logs', logRoutes);
+app.use('/api/opd-admin', opdAdminRoutes);
+app.use('/api/saran', saranRoutes);
+app.use('/api/kader', kaderRoutes);
+app.use('/api/debug', debugRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/statistik', statistikRoutes);
 
@@ -46,10 +46,15 @@ app.get('/', (req: Request, res: Response) => {
     res.send('Server Backend Skripsi (TypeScript) Berjalan! 🚀');
 });
 
-// Jalankan Server
-app.listen(PORT, () => {
-    console.log(`Server berjalan di http://localhost:${PORT}`);
-});
+// Jalankan Server (Hanya untuk lokal)
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`Server berjalan di http://localhost:${PORT}`);
+    });
+}
+
+// Export app untuk Vercel Serverless
+export default app;
 
 // Handle unhandled rejections
 process.on('unhandledRejection', (reason) => {
