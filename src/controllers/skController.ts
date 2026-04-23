@@ -143,7 +143,7 @@ export const createSK = async (req: AuthRequest, res: Response): Promise<void> =
         judul_sk,
         tanggal_terbit,
         batas_aktif,
-        daftar_relawan
+        kader_ids: rawKaderIds  // 'ALL' atau '[1,2,3]'
     } = req.body;
 
     // ============================================
@@ -265,100 +265,56 @@ export const createSK = async (req: AuthRequest, res: Response): Promise<void> =
         const new_sk_id = skResult.rows[0].sk_id;
 
         // ============================================
-        // PROSES: Link Relawan ke SK ini
+        // PROSES: Auto-Assign SK ke Kader & Relawan
         // ============================================
-        const penugasanBerhasil = [];
-        const penugasanGagal = [];
+        let kaderUpdated = 0;
+        let penugasanUpdated = 0;
+        let picUpdated = 0;
 
-        if (daftar_relawan && Array.isArray(daftar_relawan) && daftar_relawan.length > 0) {
+        if (rawKaderIds === 'ALL') {
+            // === MODE: Semua Kader di OPD ===
+            const r1 = await client.query(
+                `UPDATE kader SET sk_id = $1 WHERE opd_id = $2`,
+                [new_sk_id, opd_id]
+            );
+            kaderUpdated = r1.rowCount ?? 0;
 
-            for (const item of daftar_relawan) {
-                try {
-                    // 1. Cari relawan berdasarkan NIK
-                    const checkRelawan = await client.query(`
-                            SELECT r.relawan_id, u.nama_lengkap, u.nik
-                            FROM relawan r
-                            JOIN users u ON r.user_id = u.user_id
-                            WHERE u.nik = $1 AND u.role = 'relawan'
-                        `, [item.nik]);
+            const r2 = await client.query(
+                `UPDATE penugasan_relawan SET sk_id = $1, status_keaktifan = 'Aktif', updated_at = CURRENT_TIMESTAMP WHERE opd_id = $2`,
+                [new_sk_id, opd_id]
+            );
+            penugasanUpdated = r2.rowCount ?? 0;
 
-                    if (checkRelawan.rows.length === 0) {
-                        penugasanGagal.push({
-                            nik: item.nik,
-                            nama: item.nama_lengkap || 'Tidak diketahui',
-                            error: 'Relawan tidak ditemukan'
-                        });
-                        continue;
-                    }
+            const r3 = await client.query(
+                `UPDATE pic_kader SET sk_id = $1 WHERE kader_id IN (SELECT kader_id FROM kader WHERE opd_id = $2)`,
+                [new_sk_id, opd_id]
+            );
+            picUpdated = r3.rowCount ?? 0;
 
-                    const relawan_id = checkRelawan.rows[0].relawan_id;
+        } else if (rawKaderIds) {
+            // === MODE: Kader Spesifik ===
+            const kaderIdsArray: number[] = typeof rawKaderIds === 'string'
+                ? JSON.parse(rawKaderIds)
+                : rawKaderIds;
 
-                    // 2. Cari kader berdasarkan nama
-                    let kader_id = null;
-                    if (item.kader) {
-                        const checkKader = await client.query(`
-                                SELECT kader_id FROM kader 
-                                WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) 
-                                AND opd_id = $2
-                                LIMIT 1
-                            `, [item.kader, opd_id]);
+            if (Array.isArray(kaderIdsArray) && kaderIdsArray.length > 0) {
+                const r1 = await client.query(
+                    `UPDATE kader SET sk_id = $1 WHERE kader_id = ANY($2::int[])`,
+                    [new_sk_id, kaderIdsArray]
+                );
+                kaderUpdated = r1.rowCount ?? 0;
 
-                        if (checkKader.rows.length > 0) {
-                            kader_id = checkKader.rows[0].kader_id;
-                        }
-                    }
+                const r2 = await client.query(
+                    `UPDATE penugasan_relawan SET sk_id = $1, status_keaktifan = 'Aktif', updated_at = CURRENT_TIMESTAMP WHERE kader_id = ANY($2::int[])`,
+                    [new_sk_id, kaderIdsArray]
+                );
+                penugasanUpdated = r2.rowCount ?? 0;
 
-                    // 3. Cek apakah penugasan sudah ada
-                    const checkPenugasan = await client.query(`
-                            SELECT penugasan_id FROM penugasan_relawan 
-                            WHERE relawan_id = $1 AND opd_id = $2
-                        `, [relawan_id, opd_id]);
-
-                    if (checkPenugasan.rows.length > 0) {
-                        // UPDATE existing
-                        const penugasan_id = checkPenugasan.rows[0].penugasan_id;
-                        await client.query(`
-                                UPDATE penugasan_relawan 
-                                SET sk_id = $1,
-                                    kader_id = COALESCE($2, kader_id),
-                                    jabatan = COALESCE($3, jabatan),
-                                    status_keaktifan = 'Aktif',
-                                    updated_at = CURRENT_TIMESTAMP
-                                WHERE penugasan_id = $4
-                            `, [new_sk_id, kader_id, item.jabatan || null, penugasan_id]);
-
-                        penugasanBerhasil.push({
-                            nik: item.nik,
-                            nama: checkRelawan.rows[0].nama_lengkap,
-                            penugasan_id: penugasan_id,
-                            action: 'UPDATED'
-                        });
-
-                    } else {
-                        // INSERT new
-                        const insertRes = await client.query(`
-                                INSERT INTO penugasan_relawan (
-                                    relawan_id, opd_id, kader_id, sk_id, jabatan, status_keaktifan
-                                )
-                                VALUES ($1, $2, $3, $4, $5, 'Aktif')
-                                RETURNING penugasan_id
-                            `, [relawan_id, opd_id, kader_id, new_sk_id, item.jabatan || null]);
-
-                        penugasanBerhasil.push({
-                            nik: item.nik,
-                            nama: checkRelawan.rows[0].nama_lengkap,
-                            penugasan_id: insertRes.rows[0].penugasan_id,
-                            action: 'INSERTED'
-                        });
-                    }
-
-                } catch (error: any) {
-                    penugasanGagal.push({
-                        nik: item.nik,
-                        nama: item.nama_lengkap || 'Tidak diketahui',
-                        error: error.message
-                    });
-                }
+                const r3 = await client.query(
+                    `UPDATE pic_kader SET sk_id = $1 WHERE kader_id = ANY($2::int[])`,
+                    [new_sk_id, kaderIdsArray]
+                );
+                picUpdated = r3.rowCount ?? 0;
             }
         }
 
@@ -370,11 +326,11 @@ export const createSK = async (req: AuthRequest, res: Response): Promise<void> =
             data: {
                 sk_id: new_sk_id,
                 nomor_sk,
-                file_size: `${(req.file!.size / 1024).toFixed(2)} KB`,  // ✅ Pakai ! operator
-                total_relawan_ditugaskan: penugasanBerhasil.length,
-                relawan_berhasil: penugasanBerhasil,
-                relawan_gagal: penugasanGagal,
-                note: daftar_relawan?.length === 0 ? 'SK tersimpan tanpa relawan. Gunakan endpoint link-relawan untuk menambahkan.' : ''
+                file_size: `${(req.file!.size / 1024).toFixed(2)} KB`,
+                total_kader_terkait: kaderUpdated,
+                total_relawan_terkait: penugasanUpdated,
+                total_pic_terkait: picUpdated,
+                mode: rawKaderIds === 'ALL' ? 'SEMUA_KADER' : 'KADER_SPESIFIK'
             }
         });
 
