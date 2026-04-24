@@ -19,8 +19,10 @@ export const register = async (req: Request, res: Response) => {
         }
 
         // Enkripsi Password (Hashing)
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
+        const salt = await bcrypt.genSalt(12);
+        // Register
+        const hashedPassword = await bcrypt.hash(password + process.env.PASSWORD_PEPPER, salt);
+
 
         // Masukkan ke Database
         const newUser = await pool.query(
@@ -51,7 +53,7 @@ export const login = async (req: Request, res: Response) => {
         const user = userQuery.rows[0];
 
         // 2. Cek Password
-        const validPassword = await bcrypt.compare(password, user.password);
+        const validPassword = await bcrypt.compare(password + process.env.PASSWORD_PEPPER, user.password);
         if (!validPassword) {
             return res.status(400).json({ message: 'Password salah!' });
         }
@@ -80,12 +82,12 @@ export const login = async (req: Request, res: Response) => {
 
         // 4. Buat Token (JWT)
         const token = jwt.sign(
-            { 
-                id: user.user_id, 
+            {
+                id: user.user_id,
                 role: user.role,
-                opd_id: opd_id 
+                opd_id: opd_id
             },
-            process.env.JWT_SECRET || 'rahasia_skripsi_caesar', 
+            process.env.JWT_SECRET || 'rahasia_skripsi_caesar',
             { expiresIn: '2h' }
         );
 
@@ -97,8 +99,8 @@ export const login = async (req: Request, res: Response) => {
                 nik: user.nik,
                 nama: user.nama_lengkap,
                 role: user.role,
-                opd_id: opd_id,     
-                nama_opd: nama_opd  
+                opd_id: opd_id,
+                nama_opd: nama_opd
             }
         });
 
