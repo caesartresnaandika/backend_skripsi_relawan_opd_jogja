@@ -68,7 +68,7 @@ export const login = async (req: Request, res: Response) => {
                 SELECT po.opd_id, o.nama_opd 
                 FROM pengelola_opd po
                 JOIN opd o ON po.opd_id = o.opd_id
-                WHERE po.user_id = $1
+                WHERE po.user_id = $1 AND po.status = 'Aktif'
             `, [user.user_id]);
 
             if (opdQuery.rows.length > 0) {
