@@ -17,7 +17,7 @@ export const requireOpdContext = async (req: OpdAuthRequest, res: Response, next
 
         // Cari opd_id-nya di database based on user_id
         const result = await executeQueryWithContext(
-            `SELECT opd_id FROM pengelola_opd WHERE user_id = $1 LIMIT 1`,
+            `SELECT opd_id FROM pengelola_opd WHERE user_id = $1 AND status = 'Aktif' LIMIT 1`,
             [req.user.id],
             req.user
         );
@@ -29,7 +29,7 @@ export const requireOpdContext = async (req: OpdAuthRequest, res: Response, next
 
         // Simpan opd_id ke request object agar controller di rute ini tidak perlu query ulang
         req.opd_id = result.rows[0].opd_id;
-        
+
         next();
 
     } catch (error: any) {

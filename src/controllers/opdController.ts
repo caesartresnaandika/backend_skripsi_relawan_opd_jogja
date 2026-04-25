@@ -7,9 +7,14 @@ import bcrypt from 'bcrypt';
 export const getAllOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const query = `
-            SELECT opd_id, nama_opd, alamat, kontak, pic, nik_pic, is_active, created_at, updated_at
-            FROM opd
-            ORDER BY created_at DESC;
+            SELECT o.opd_id, o.nama_opd, o.alamat, o.is_active, o.created_at, o.updated_at,
+                   u.nama_lengkap AS pic,
+                   u.nik AS nik_pic,
+                   u.no_hp AS kontak
+            FROM opd o
+            LEFT JOIN pengelola_opd po ON o.opd_id = po.opd_id AND po.status = 'Aktif'
+            LEFT JOIN users u ON po.user_id = u.user_id
+            ORDER BY o.created_at DESC;
         `;
         const result = await executeQueryWithContext(query, [], req.user);
         res.status(200).json({ success: true, message: 'Berhasil mengambil daftar OPD', data: result.rows });
@@ -19,12 +24,19 @@ export const getAllOpd = async (req: AuthRequest, res: Response): Promise<void> 
     }
 };
 
+
 export const getOpdById = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     try {
         const query = `
-            SELECT opd_id, nama_opd, alamat, kontak, pic, nik_pic, is_active, created_at, updated_at
-            FROM opd WHERE opd_id = $1;
+            SELECT o.opd_id, o.nama_opd, o.alamat, o.is_active, o.created_at, o.updated_at,
+                   u.nama_lengkap AS pic,
+                   u.nik AS nik_pic,
+                   u.no_hp AS kontak
+            FROM opd o
+            LEFT JOIN pengelola_opd po ON o.opd_id = po.opd_id AND po.status = 'Aktif'
+            LEFT JOIN users u ON po.user_id = u.user_id
+            WHERE o.opd_id = $1;
         `;
         const result = await executeQueryWithContext(query, [id], req.user);
         if (result.rows.length === 0) {
@@ -39,7 +51,8 @@ export const getOpdById = async (req: AuthRequest, res: Response): Promise<void>
 };
 
 export const createOpd = async (req: AuthRequest, res: Response): Promise<void> => {
-    const { nama_opd, alamat, kontak, pic, nik_pic } = req.body;
+    const { nama_opd, alamat, nik_pic, nama_pic } = req.body;
+    // nama_pic = nama lengkap PIC (opsional, fallback ke nama_opd)
 
     if (!nama_opd) {
         res.status(400).json({ success: false, message: 'Field nama_opd wajib diisi' });
@@ -64,19 +77,26 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(nik_pic, salt);
 
+        // 1. Buat akun user
         const userRes = await executeQueryWithContext(
             `INSERT INTO users (nik, nama_lengkap, password, role, is_active) VALUES ($1, $2, $3, 'opd', true) RETURNING user_id;`,
-            [nik_pic, pic || nama_opd, hashedPassword], req.user
+            [nik_pic, nama_pic || nama_opd, hashedPassword], req.user
         );
         const userId = userRes.rows[0].user_id;
 
+        // 2. Buat OPD (tanpa pic/nik_pic/kontak)
         const opdRes = await executeQueryWithContext(
-            `INSERT INTO opd (nama_opd, alamat, kontak, pic, nik_pic) VALUES ($1, $2, $3, $4, $5) RETURNING *;`,
-            [nama_opd, alamat || null, kontak || null, pic || null, nik_pic], req.user
+            `INSERT INTO opd (nama_opd, alamat) VALUES ($1, $2) RETURNING *;`,
+            [nama_opd, alamat || null], req.user
         );
         const opdId = opdRes.rows[0].opd_id;
 
-        await executeQueryWithContext(`INSERT INTO pengelola_opd (user_id, opd_id) VALUES ($1, $2)`, [userId, opdId], req.user);
+        // 3. Ikat di pengelola_opd (dengan kolom baru)
+        await executeQueryWithContext(
+            `INSERT INTO pengelola_opd (user_id, opd_id, jabatan, tanggal_mulai, status)
+             VALUES ($1, $2, 'Pengelola OPD', CURRENT_DATE, 'Aktif')`,
+            [userId, opdId], req.user
+        );
 
         res.status(201).json({
             success: true,
@@ -112,12 +132,10 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
             }
 
             const namaOpd = (item['NAMAOPD'] || item['NAMA OPD'] || '').trim();
-            const nikPic  = String(item['NIK PIC'] || item['NIKPIC'] || '').trim();
-            const pic     = (item['PIC'] || '').trim() || null;
-            const alamat  = (item['ALAMAT'] || '').trim() || null;
-            const kontak  = (item['KONTAK'] || '').trim() || null;
+            const nikPic = String(item['NIK PIC'] || item['NIKPIC'] || '').trim();
+            const pic = (item['PIC'] || '').trim() || null;
+            const alamat = (item['ALAMAT'] || '').trim() || null;
 
-            // ── Validasi per baris ──
             if (!namaOpd) {
                 errors.push('Satu baris dilewati: kolom namaOpd kosong');
                 continue;
@@ -127,7 +145,6 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
                 continue;
             }
 
-            // ── Cek NIK sudah ada ──
             const checkNik = await executeQueryWithContext(
                 `SELECT user_id FROM users WHERE nik = $1`, [nikPic], req.user
             );
@@ -136,7 +153,7 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
                 continue;
             }
 
-            // ── Buat akun user dengan role 'opd' ──
+            // Buat akun user
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash(nikPic, salt);
             const userRes = await executeQueryWithContext(
@@ -146,17 +163,18 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
             );
             const userId = userRes.rows[0].user_id;
 
-            // ── Insert OPD ──
+            // Insert OPD (tanpa pic/nik_pic/kontak)
             const opdRes = await executeQueryWithContext(
-                `INSERT INTO opd (nama_opd, alamat, kontak, pic, nik_pic, is_active)
-                 VALUES ($1, $2, $3, $4, $5, true) RETURNING opd_id`,
-                [namaOpd, alamat, kontak, pic, nikPic], req.user
+                `INSERT INTO opd (nama_opd, alamat, is_active)
+                 VALUES ($1, $2, true) RETURNING opd_id`,
+                [namaOpd, alamat], req.user
             );
             const opdId = opdRes.rows[0].opd_id;
 
-            // ── Ikat user ke OPD di pengelola_opd ──
+            // Ikat di pengelola_opd (dengan kolom baru)
             await executeQueryWithContext(
-                `INSERT INTO pengelola_opd (user_id, opd_id) VALUES ($1, $2)`,
+                `INSERT INTO pengelola_opd (user_id, opd_id, jabatan, tanggal_mulai, status)
+                 VALUES ($1, $2, 'Pengelola OPD', CURRENT_DATE, 'Aktif')`,
                 [userId, opdId], req.user
             );
 
@@ -182,15 +200,15 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
 
 export const updateOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { nama_opd, alamat, kontak, pic } = req.body;
+    const { nama_opd, alamat } = req.body;
     if (!nama_opd) {
         res.status(400).json({ success: false, message: 'Field nama_opd wajib diisi' });
         return;
     }
     try {
         const result = await executeQueryWithContext(
-            `UPDATE opd SET nama_opd = $1, alamat = $2, kontak = $3, pic = $4, updated_at = CURRENT_TIMESTAMP WHERE opd_id = $5 RETURNING *;`,
-            [nama_opd, alamat || null, kontak || null, pic || null, id], req.user
+            `UPDATE opd SET nama_opd = $1, alamat = $2, updated_at = CURRENT_TIMESTAMP WHERE opd_id = $3 RETURNING *;`,
+            [nama_opd, alamat || null, id], req.user
         );
         if (result.rows.length === 0) {
             res.status(404).json({ success: false, message: 'Data OPD tidak ditemukan' });
