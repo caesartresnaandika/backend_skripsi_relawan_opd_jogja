@@ -75,7 +75,7 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
         }
 
         const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(nik_pic, salt);
+        const hashedPassword = await bcrypt.hash(nik_pic + (process.env.PASSWORD_PEPPER || ''), salt);
 
         // 1. Buat akun user
         const userRes = await executeQueryWithContext(
@@ -158,7 +158,7 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
 
             // Buat akun user
             const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(nikPic, salt);
+            const hashedPassword = await bcrypt.hash(nikPic + (process.env.PASSWORD_PEPPER || ''), salt);
             const userRes = await executeQueryWithContext(
                 `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
                  VALUES ($1, $2, $3, $4, 'opd', true) RETURNING user_id`,

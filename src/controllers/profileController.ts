@@ -93,7 +93,7 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
         }
 
         // 2. Verifikasi password lama
-        const isMatch = await bcrypt.compare(password_lama, userRes.rows[0].password);
+        const isMatch = await bcrypt.compare(password_lama + (process.env.PASSWORD_PEPPER || ''), userRes.rows[0].password);
         if (!isMatch) {
             res.status(400).json({ success: false, message: 'Password lama tidak sesuai' });
             return;
@@ -101,7 +101,7 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
 
         // 3. Hash password baru
         const salt = await bcrypt.genSalt(10);
-        const hashedBaru = await bcrypt.hash(password_baru, salt);
+        const hashedBaru = await bcrypt.hash(password_baru + (process.env.PASSWORD_PEPPER || ''), salt);
 
         // 4. Simpan password baru
         await executeQueryWithContext(

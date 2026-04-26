@@ -183,7 +183,7 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
             return;
         }
 
-        const hashedPassword = await bcrypt.hash(nik, await bcrypt.genSalt(10));
+        const hashedPassword = await bcrypt.hash(nik + (process.env.PASSWORD_PEPPER || ''), await bcrypt.genSalt(10));
         const userRes = await client.query(`
             INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
             VALUES ($1,$2,$3,$4,'relawan',true) RETURNING user_id
@@ -333,7 +333,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     }
                 } else {
                     // ── NIK baru → INSERT user + relawan ───────────────────────
-                    const hashedPassword = await bcrypt.hash(item.nik, await bcrypt.genSalt(10));
+                    const hashedPassword = await bcrypt.hash(item.nik + (process.env.PASSWORD_PEPPER || ''), await bcrypt.genSalt(10));
                     const uRes = await client.query(`
                         INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
                         VALUES ($1,$2,$3,$4,'relawan',true) RETURNING user_id
