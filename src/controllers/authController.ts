@@ -7,8 +7,15 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// === 1. FITUR REGISTRASI ===
+// === 1. FITUR REGISTRASI (Dilindungi Setup Key) ===
 export const register = async (req: Request, res: Response) => {
+    // ── Validasi Setup Key ──
+    // Hanya request dengan header X-Setup-Key yang benar yang diizinkan
+    const setupKey = req.headers['x-setup-key'] as string | undefined;
+    if (!setupKey || setupKey !== process.env.SETUP_SECRET_KEY) {
+        return res.status(403).json({ message: 'Akses Ditolak! Setup key tidak valid.' });
+    }
+
     const { nik, nama_lengkap, password, role } = req.body;
 
     try {
