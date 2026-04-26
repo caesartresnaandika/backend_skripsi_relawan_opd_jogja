@@ -138,7 +138,7 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
             // NIK belum ada → buat user baru + relawan baru
             const bcrypt = await import('bcrypt');
             const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(String(nik_pic), salt);
+            const hashedPassword = await bcrypt.hash(String(nik_pic) + (process.env.PASSWORD_PEPPER || ''), salt);
 
             const userRes = await client.query(
                 `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
@@ -379,7 +379,7 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
                 } else {
                     const bcrypt = await import('bcrypt');
                     const salt = await bcrypt.genSalt(10);
-                    const hashedPassword = await bcrypt.hash(nikPic, salt);
+                    const hashedPassword = await bcrypt.hash(nikPic + (process.env.PASSWORD_PEPPER || ''), salt);
                     const userRes = await client.query(
                         `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
                          VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
@@ -514,7 +514,7 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
         } else {
             const bcrypt = await import('bcrypt');
             const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(String(nik_pic), salt);
+            const hashedPassword = await bcrypt.hash(String(nik_pic) + (process.env.PASSWORD_PEPPER || ''), salt);
             const userRes = await client.query(
                 `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
                  VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
@@ -699,7 +699,7 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
                 } else {
                     const bcrypt = await import('bcrypt');
                     const salt = await bcrypt.genSalt(10);
-                    const hashedPassword = await bcrypt.hash(nikPic, salt);
+                    const hashedPassword = await bcrypt.hash(nikPic + (process.env.PASSWORD_PEPPER || ''), salt);
                     const userRes = await client.query(
                         `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
                          VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
@@ -803,7 +803,7 @@ export const assignPicKader = async (req: AuthRequest, res: Response): Promise<v
         } else {
             const bcrypt = await import('bcrypt');
             const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(String(nik_pic), salt);
+            const hashedPassword = await bcrypt.hash(String(nik_pic) + (process.env.PASSWORD_PEPPER || ''), salt);
             const userRes = await client.query(
                 `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
                  VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
