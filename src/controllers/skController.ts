@@ -7,7 +7,10 @@ import pool from '../../config/db';
 // 1. Dapatkan daftar semua SK
 export const getAllSK = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const query = `
+        const userRole = req.user?.role;
+        const opdId = (req.user as any)?.opd_id;
+
+        let query = `
             SELECT 
                 sk.sk_id, sk.nomor_sk, sk.judul_sk, sk.tanggal_terbit, sk.batas_aktif, sk.status,
                 o.nama_opd, o.opd_id,
@@ -21,9 +24,21 @@ export const getAllSK = async (req: AuthRequest, res: Response): Promise<void> =
                 CASE WHEN sk.file_path IS NOT NULL THEN true ELSE false END AS has_file
             FROM surat_keputusan sk
             JOIN opd o ON sk.opd_id = o.opd_id
-            ORDER BY sk.created_at DESC;
         `;
-        const result = await executeQueryWithContext(query, [], req.user);
+        const params: any[] = [];
+
+        if (userRole === 'opd') {
+            if (!opdId) {
+                res.status(403).json({ success: false, message: 'Akses ditolak: OPD ID tidak ditemukan' });
+                return;
+            }
+            query += ` WHERE sk.opd_id = $1`;
+            params.push(opdId);
+        }
+
+        query += ` ORDER BY sk.created_at DESC;`;
+
+        const result = await executeQueryWithContext(query, params, req.user);
 
         res.status(200).json({
             success: true,
@@ -40,6 +55,9 @@ export const getAllSK = async (req: AuthRequest, res: Response): Promise<void> =
 export const getSKById = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     try {
+        const userRole = req.user?.role;
+        const opdId = (req.user as any)?.opd_id;
+
         const querySK = `
             SELECT 
                 sk.sk_id, sk.nomor_sk, sk.judul_sk, sk.tanggal_terbit, sk.batas_aktif, sk.status, sk.file_path,
@@ -56,6 +74,11 @@ export const getSKById = async (req: AuthRequest, res: Response): Promise<void> 
         }
 
         const sk_data = resultSK.rows[0];
+
+        if (userRole === 'opd' && sk_data.opd_id !== opdId) {
+            res.status(403).json({ success: false, message: 'Akses ditolak: Surat Keputusan ini bukan milik OPD Anda' });
+            return;
+        }
 
         const queryRelawan = `
             SELECT 
@@ -90,8 +113,11 @@ export const getSKById = async (req: AuthRequest, res: Response): Promise<void> 
 export const getSKPdf = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     try {
+        const userRole = req.user?.role;
+        const opdId = (req.user as any)?.opd_id;
+
         const query = `
-            SELECT file_path, nomor_sk 
+            SELECT file_path, nomor_sk, opd_id
             FROM surat_keputusan 
             WHERE sk_id = $1;
         `;
@@ -99,6 +125,11 @@ export const getSKPdf = async (req: AuthRequest, res: Response): Promise<void> =
 
         if (result.rows.length === 0 || !result.rows[0].file_path) {
             res.status(404).json({ success: false, message: 'File PDF tidak ditemukan' });
+            return;
+        }
+
+        if (userRole === 'opd' && result.rows[0].opd_id !== opdId) {
+            res.status(403).json({ success: false, message: 'Akses ditolak: Surat Keputusan ini bukan milik OPD Anda' });
             return;
         }
 
@@ -374,6 +405,23 @@ export const updateSKStatus = async (req: AuthRequest, res: Response): Promise<v
     }
 
     try {
+        const userRole = req.user?.role;
+        const opdId = (req.user as any)?.opd_id;
+
+        if (userRole === 'opd') {
+            const checkQuery = `SELECT opd_id FROM surat_keputusan WHERE sk_id = $1`;
+            const checkResult = await executeQueryWithContext(checkQuery, [id], req.user);
+            
+            if (checkResult.rows.length === 0) {
+                res.status(404).json({ success: false, message: 'Data SK tidak ditemukan' });
+                return;
+            }
+
+            if (checkResult.rows[0].opd_id !== opdId) {
+                res.status(403).json({ success: false, message: 'Akses ditolak: Surat Keputusan ini bukan milik OPD Anda' });
+                return;
+            }
+        }
         const query = `
             UPDATE surat_keputusan
             SET status = $1, updated_at = CURRENT_TIMESTAMP
@@ -403,6 +451,23 @@ export const deleteSK = async (req: AuthRequest, res: Response): Promise<void> =
     const { id } = req.params;
 
     try {
+        const userRole = req.user?.role;
+        const opdId = (req.user as any)?.opd_id;
+
+        if (userRole === 'opd') {
+            const checkQuery = `SELECT opd_id FROM surat_keputusan WHERE sk_id = $1`;
+            const checkResult = await executeQueryWithContext(checkQuery, [id], req.user);
+            
+            if (checkResult.rows.length === 0) {
+                res.status(404).json({ success: false, message: 'Data SK tidak ditemukan' });
+                return;
+            }
+
+            if (checkResult.rows[0].opd_id !== opdId) {
+                res.status(403).json({ success: false, message: 'Akses ditolak: Surat Keputusan ini bukan milik OPD Anda' });
+                return;
+            }
+        }
         // Cek apakah SK masih punya relawan yang ditugaskan
         const checkPenugasan = await executeQueryWithContext(
             'SELECT COUNT(*) as count FROM penugasan_relawan WHERE sk_id = $1',
