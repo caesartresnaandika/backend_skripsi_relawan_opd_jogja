@@ -51,7 +51,7 @@ export const getOpdById = async (req: AuthRequest, res: Response): Promise<void>
 };
 
 export const createOpd = async (req: AuthRequest, res: Response): Promise<void> => {
-    const { nama_opd, alamat, nik_pic, nama_pic } = req.body;
+    const { nama_opd, alamat, kontak, nik_pic, nama_pic } = req.body;
     // nama_pic = nama lengkap PIC (opsional, fallback ke nama_opd)
 
     if (!nama_opd) {
@@ -79,12 +79,13 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
 
         // 1. Buat akun user
         const userRes = await executeQueryWithContext(
-            `INSERT INTO users (nik, nama_lengkap, password, role, is_active) VALUES ($1, $2, $3, 'opd', true) RETURNING user_id;`,
-            [nik_pic, nama_pic || nama_opd, hashedPassword], req.user
+            `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+            VALUES ($1, $2, $3, $4, 'opd', true) RETURNING user_id`,
+            [nik_pic, nama_pic || nama_opd, kontak, hashedPassword], req.user
         );
         const userId = userRes.rows[0].user_id;
 
-        // 2. Buat OPD (tanpa pic/nik_pic/kontak)
+        // 2. Buat OPD 
         const opdRes = await executeQueryWithContext(
             `INSERT INTO opd (nama_opd, alamat) VALUES ($1, $2) RETURNING *;`,
             [nama_opd, alamat || null], req.user
@@ -135,6 +136,8 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
             const nikPic = String(item['NIK PIC'] || item['NIKPIC'] || '').trim();
             const pic = (item['PIC'] || '').trim() || null;
             const alamat = (item['ALAMAT'] || '').trim() || null;
+            const kontak = (item['KONTAK'] || item['NOHP'] || '').trim() || null;
+
 
             if (!namaOpd) {
                 errors.push('Satu baris dilewati: kolom namaOpd kosong');
@@ -157,9 +160,9 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash(nikPic, salt);
             const userRes = await executeQueryWithContext(
-                `INSERT INTO users (nik, nama_lengkap, password, role, is_active)
-                 VALUES ($1, $2, $3, 'opd', true) RETURNING user_id`,
-                [nikPic, pic || namaOpd, hashedPassword], req.user
+                `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                 VALUES ($1, $2, $3, $4, 'opd', true) RETURNING user_id`,
+                [nikPic, pic || namaOpd, kontak, hashedPassword], req.user
             );
             const userId = userRes.rows[0].user_id;
 

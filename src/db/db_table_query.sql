@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS public.audit_logs
     CONSTRAINT audit_logs_pkey PRIMARY KEY (log_id)
 );
 
+ALTER TABLE IF EXISTS public.audit_logs
+    ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.kader
 (
     kader_id serial NOT NULL,
@@ -38,12 +41,9 @@ CREATE TABLE IF NOT EXISTS public.opd
     opd_id serial NOT NULL,
     nama_opd character varying(100) COLLATE pg_catalog."default" NOT NULL,
     alamat text COLLATE pg_catalog."default",
-    kontak character varying(50) COLLATE pg_catalog."default",
-    pic character varying(100) COLLATE pg_catalog."default",
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     is_active boolean DEFAULT true,
-    nik_pic character varying(16) COLLATE pg_catalog."default",
     CONSTRAINT opd_pkey PRIMARY KEY (opd_id)
 );
 
@@ -74,9 +74,17 @@ CREATE TABLE IF NOT EXISTS public.pengelola_opd
     id serial NOT NULL,
     user_id integer NOT NULL,
     opd_id integer NOT NULL,
-    CONSTRAINT pengelola_opd_pkey PRIMARY KEY (id),
-    CONSTRAINT pengelola_opd_user_id_key UNIQUE (user_id)
+    jabatan character varying(100) COLLATE pg_catalog."default",
+    tanggal_mulai date DEFAULT CURRENT_DATE,
+    tanggal_selesai date,
+    status character varying(20) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Aktif'::character varying,
+    sk_id integer,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pengelola_opd_pkey PRIMARY KEY (id)
 );
+
+ALTER TABLE IF EXISTS public.pengelola_opd
+    ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.penugasan_relawan
 (
@@ -145,6 +153,9 @@ CREATE TABLE IF NOT EXISTS public.saran_masukan
     CONSTRAINT saran_masukan_pkey PRIMARY KEY (saran_id)
 );
 
+ALTER TABLE IF EXISTS public.saran_masukan
+    ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.surat_keputusan
 (
     sk_id serial NOT NULL,
@@ -160,6 +171,9 @@ CREATE TABLE IF NOT EXISTS public.surat_keputusan
     CONSTRAINT surat_keputusan_pkey PRIMARY KEY (sk_id),
     CONSTRAINT surat_keputusan_nomor_sk_key UNIQUE (nomor_sk)
 );
+
+ALTER TABLE IF EXISTS public.surat_keputusan
+    ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS public.users
 (
@@ -177,6 +191,9 @@ CREATE TABLE IF NOT EXISTS public.users
     CONSTRAINT users_pkey PRIMARY KEY (user_id),
     CONSTRAINT users_nik_key UNIQUE (nik)
 );
+
+ALTER TABLE IF EXISTS public.users
+    ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE IF EXISTS public.audit_logs
     ADD CONSTRAINT fk_audit_user FOREIGN KEY (user_id)
@@ -222,6 +239,17 @@ ALTER TABLE IF EXISTS public.pengelola_opd
     REFERENCES public.opd (opd_id) MATCH SIMPLE
     ON UPDATE CASCADE
     ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_unique_active_pengelola_per_opd
+    ON public.pengelola_opd(opd_id);
+
+
+ALTER TABLE IF EXISTS public.pengelola_opd
+    ADD CONSTRAINT fk_pengelola_sk FOREIGN KEY (sk_id)
+    REFERENCES public.surat_keputusan (sk_id) MATCH SIMPLE
+    ON UPDATE CASCADE
+    ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_pengelola_opd_sk_id
+    ON public.pengelola_opd(sk_id);
 
 
 ALTER TABLE IF EXISTS public.pengelola_opd
@@ -229,8 +257,6 @@ ALTER TABLE IF EXISTS public.pengelola_opd
     REFERENCES public.users (user_id) MATCH SIMPLE
     ON UPDATE CASCADE
     ON DELETE CASCADE;
-CREATE INDEX IF NOT EXISTS pengelola_opd_user_id_key
-    ON public.pengelola_opd(user_id);
 
 
 ALTER TABLE IF EXISTS public.penugasan_relawan
