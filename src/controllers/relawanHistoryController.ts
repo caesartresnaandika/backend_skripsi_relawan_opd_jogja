@@ -16,7 +16,7 @@ export const getMyHistory = async (req: RelawanAuthRequest, res: Response): Prom
             executeQueryWithContext(`
                 SELECT 
                     pr.status_keaktifan, pr.created_at, pr.updated_at,
-                    sk.nomor_sk, sk.judul_sk, sk.batas_aktif,
+                    sk.nomor_sk, sk.judul_sk, sk.tanggal_terbit, sk.batas_aktif,
                     o.nama_opd, k.nama_kader
                 FROM penugasan_relawan pr
                 JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id

@@ -311,16 +311,44 @@ export const createSK = async (req: AuthRequest, res: Response): Promise<void> =
             kaderUpdated = r1.rowCount ?? 0;
 
             const r2 = await client.query(
-                `UPDATE penugasan_relawan SET sk_id = $1, status_keaktifan = 'Aktif', updated_at = CURRENT_TIMESTAMP WHERE opd_id = $2`,
+                `UPDATE penugasan_relawan SET sk_id = $1, status_keaktifan = 'Aktif', updated_at = CURRENT_TIMESTAMP WHERE opd_id = $2 AND sk_id IS NULL`,
                 [new_sk_id, opd_id]
             );
             penugasanUpdated = r2.rowCount ?? 0;
 
+            const r2_insert = await client.query(
+                `INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, penugasan, status_keaktifan, sk_id)
+                 SELECT DISTINCT ON (relawan_id) relawan_id, opd_id, kader_id, jabatan, detail_jabatan, penugasan, 'Aktif', $1
+                 FROM penugasan_relawan
+                 WHERE opd_id = $2
+                   AND sk_id IS NOT NULL
+                   AND relawan_id NOT IN (
+                       SELECT relawan_id FROM penugasan_relawan WHERE sk_id = $1
+                   )
+                 ORDER BY relawan_id, created_at DESC`,
+                [new_sk_id, opd_id]
+            );
+            penugasanUpdated += r2_insert.rowCount ?? 0;
+
             const r3 = await client.query(
-                `UPDATE pic_kader SET sk_id = $1 WHERE kader_id IN (SELECT kader_id FROM kader WHERE opd_id = $2)`,
+                `UPDATE pic_kader SET sk_id = $1 WHERE kader_id IN (SELECT kader_id FROM kader WHERE opd_id = $2) AND sk_id IS NULL`,
                 [new_sk_id, opd_id]
             );
             picUpdated = r3.rowCount ?? 0;
+
+            const r3_insert = await client.query(
+                `INSERT INTO pic_kader (relawan_id, kader_id, status, sk_id)
+                 SELECT DISTINCT ON (relawan_id, kader_id) relawan_id, kader_id, 'Aktif', $1
+                 FROM pic_kader
+                 WHERE kader_id IN (SELECT kader_id FROM kader WHERE opd_id = $2)
+                   AND sk_id IS NOT NULL
+                   AND (relawan_id, kader_id) NOT IN (
+                       SELECT relawan_id, kader_id FROM pic_kader WHERE sk_id = $1
+                   )
+                 ORDER BY relawan_id, kader_id, created_at DESC`,
+                 [new_sk_id, opd_id]
+            );
+            picUpdated += r3_insert.rowCount ?? 0;
 
         } else if (rawKaderIds) {
             // === MODE: Kader Spesifik ===
@@ -336,16 +364,44 @@ export const createSK = async (req: AuthRequest, res: Response): Promise<void> =
                 kaderUpdated = r1.rowCount ?? 0;
 
                 const r2 = await client.query(
-                    `UPDATE penugasan_relawan SET sk_id = $1, status_keaktifan = 'Aktif', updated_at = CURRENT_TIMESTAMP WHERE kader_id = ANY($2::int[])`,
+                    `UPDATE penugasan_relawan SET sk_id = $1, status_keaktifan = 'Aktif', updated_at = CURRENT_TIMESTAMP WHERE kader_id = ANY($2::int[]) AND sk_id IS NULL`,
                     [new_sk_id, kaderIdsArray]
                 );
                 penugasanUpdated = r2.rowCount ?? 0;
 
+                const r2_insert = await client.query(
+                    `INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, penugasan, status_keaktifan, sk_id)
+                     SELECT DISTINCT ON (relawan_id) relawan_id, opd_id, kader_id, jabatan, detail_jabatan, penugasan, 'Aktif', $1
+                     FROM penugasan_relawan
+                     WHERE kader_id = ANY($2::int[])
+                       AND sk_id IS NOT NULL
+                       AND relawan_id NOT IN (
+                           SELECT relawan_id FROM penugasan_relawan WHERE sk_id = $1
+                       )
+                     ORDER BY relawan_id, created_at DESC`,
+                    [new_sk_id, kaderIdsArray]
+                );
+                penugasanUpdated += r2_insert.rowCount ?? 0;
+
                 const r3 = await client.query(
-                    `UPDATE pic_kader SET sk_id = $1 WHERE kader_id = ANY($2::int[])`,
+                    `UPDATE pic_kader SET sk_id = $1 WHERE kader_id = ANY($2::int[]) AND sk_id IS NULL`,
                     [new_sk_id, kaderIdsArray]
                 );
                 picUpdated = r3.rowCount ?? 0;
+
+                const r3_insert = await client.query(
+                    `INSERT INTO pic_kader (relawan_id, kader_id, status, sk_id)
+                     SELECT DISTINCT ON (relawan_id, kader_id) relawan_id, kader_id, 'Aktif', $1
+                     FROM pic_kader
+                     WHERE kader_id = ANY($2::int[])
+                       AND sk_id IS NOT NULL
+                       AND (relawan_id, kader_id) NOT IN (
+                           SELECT relawan_id, kader_id FROM pic_kader WHERE sk_id = $1
+                       )
+                     ORDER BY relawan_id, kader_id, created_at DESC`,
+                     [new_sk_id, kaderIdsArray]
+                );
+                picUpdated += r3_insert.rowCount ?? 0;
             }
         }
 
