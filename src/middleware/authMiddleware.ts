@@ -24,6 +24,7 @@ const verifyToken = (req: AuthRequest, res: Response, next: NextFunction): void 
     const authHeader = req.header('Authorization');
     const token = authHeader && authHeader.split(' ')[1];
 
+
     if (!token) {
         res.status(401).json({ message: 'Akses Ditolak! Butuh Token.' });
         return;
@@ -31,7 +32,7 @@ const verifyToken = (req: AuthRequest, res: Response, next: NextFunction): void 
 
     try {
         const verified = jwt.verify(token, process.env.JWT_SECRET || 'rahasia_skripsi_caesar');
-        
+
         // ✅ FIXED: Type assertion untuk JWT payload
         const decoded = verified as {
             id: number;
@@ -39,7 +40,7 @@ const verifyToken = (req: AuthRequest, res: Response, next: NextFunction): void 
             opd_id?: number;
             nama_opd?: string;
         };
-        
+
         // Coba tangkap IP dari Railway proxy atau direct socket
         let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip;
         if (Array.isArray(clientIp)) {
@@ -52,10 +53,15 @@ const verifyToken = (req: AuthRequest, res: Response, next: NextFunction): void 
             ...decoded,
             ip: clientIp as string
         };
-        
+
         next();
-    } catch (err) {
-        res.status(400).json({ message: 'Token Tidak Valid!' });
+    } catch (err: any) {
+        if (err.name === 'TokenExpiredError') {
+            res.status(401).json({ message: 'Sesi anda telah berakhir. Silakan login kembali.' });
+            return;
+        }
+        res.status(401).json({ message: 'Token Tidak Valid!' });
+        return;
     }
 };
 
