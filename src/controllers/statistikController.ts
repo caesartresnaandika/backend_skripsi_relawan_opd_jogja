@@ -11,7 +11,7 @@ export const getStatistikGender = async (req: AuthRequest, res: Response): Promi
 
         if (user.role === 'opd') {
             result = await executeQueryWithContext(`
-                SELECT r.jenis_kelamin AS gender, COUNT(*) AS jumlah
+                SELECT r.jenis_kelamin AS gender, COUNT(DISTINCT r.relawan_id) AS jumlah
                 FROM relawan r
                 JOIN users u ON r.user_id = u.user_id
                 JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
@@ -39,7 +39,7 @@ export const getStatistikKelurahan = async (req: AuthRequest, res: Response): Pr
 
         if (user.role === 'opd') {
             result = await executeQueryWithContext(`
-                SELECT r.kelurahan, COUNT(*) AS jumlah
+                SELECT r.kelurahan, COUNT(DISTINCT r.relawan_id) AS jumlah
                 FROM relawan r
                 JOIN users u ON r.user_id = u.user_id
                 JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
@@ -53,7 +53,7 @@ export const getStatistikKelurahan = async (req: AuthRequest, res: Response): Pr
             `, [user.opd_id], user);
         } else {
             result = await executeQueryWithContext(`
-                SELECT r.kelurahan, COUNT(*) AS jumlah
+                SELECT r.kelurahan, COUNT(r.relawan_id) AS jumlah
                 FROM relawan r
                 JOIN users u ON r.user_id = u.user_id
                 WHERE u.is_active = true
@@ -80,7 +80,7 @@ export const getRelawanPerKader = async (req: AuthRequest, res: Response): Promi
 
         if (user.role === 'opd') {
             result = await executeQueryWithContext(`
-                SELECT k.nama_kader AS name, COUNT(pr.relawan_id) AS value
+                SELECT k.nama_kader AS name, COUNT(DISTINCT pr.relawan_id) AS value
                 FROM kader k
                 LEFT JOIN penugasan_relawan pr ON k.kader_id = pr.kader_id
                     AND pr.status_keaktifan = 'Aktif'
@@ -91,7 +91,7 @@ export const getRelawanPerKader = async (req: AuthRequest, res: Response): Promi
             `, [user.opd_id], user);
         } else {
             result = await executeQueryWithContext(`
-                SELECT k.nama_kader AS name, COUNT(pr.relawan_id) AS value
+                SELECT k.nama_kader AS name, COUNT(DISTINCT pr.relawan_id) AS value
                 FROM kader k
                 LEFT JOIN penugasan_relawan pr ON k.kader_id = pr.kader_id
                     AND pr.status_keaktifan = 'Aktif'
