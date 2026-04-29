@@ -27,12 +27,14 @@ export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<vo
                 r.relawan_id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
                 pr.penugasan_id, pr.penugasan, pr.jabatan, pr.detail_jabatan,
                 pr.status_keaktifan AS status_penugasan,
-                o.nama_opd, k.nama_kader
+                o.nama_opd, k.nama_kader,
+                sk.tanggal_terbit, sk.batas_aktif
             FROM users u
             JOIN relawan r ON u.user_id = r.user_id
             LEFT JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
             LEFT JOIN opd o ON pr.opd_id = o.opd_id
             LEFT JOIN kader k ON pr.kader_id = k.kader_id
+            LEFT JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id
             WHERE u.role = 'relawan'
             ORDER BY u.created_at DESC
         `, [], req.user);

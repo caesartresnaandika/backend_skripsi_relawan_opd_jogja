@@ -28,12 +28,14 @@ export const getRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promi
                 pr.penugasan_id, pr.jabatan, pr.detail_jabatan,
                 pr.status_keaktifan AS status_penugasan,
                 pr.opd_id, pr.kader_id,
-                o.nama_opd, k.nama_kader
+                o.nama_opd, k.nama_kader,
+                sk.tanggal_terbit, sk.batas_aktif
             FROM penugasan_relawan pr
             JOIN relawan r ON pr.relawan_id = r.relawan_id
             JOIN users u ON r.user_id = u.user_id
             JOIN opd o ON pr.opd_id = o.opd_id
             LEFT JOIN kader k ON pr.kader_id = k.kader_id
+            LEFT JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id
             WHERE pr.opd_id = $1
             ORDER BY u.nama_lengkap ASC
         `, [req.opd_id], req.user);
