@@ -1,7 +1,5 @@
 //opdAdminRoutes.ts
 import { Router } from 'express';
-import { OpdAuthRequest } from '../middleware/opdMiddleware';
-import bcrypt from 'bcrypt';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 import { requireOpdContext } from '../middleware/opdMiddleware';
 import { getOpdDashboardStats } from '../controllers/opdDashboardController';
@@ -14,12 +12,12 @@ import {
     assignPicKader,
     getPicKaderHistory
 } from '../controllers/kaderController';
-import { 
-    getRelawanByOpd, 
+import {
+    getRelawanByOpd,
     getSkByOpd,
     createRelawanByOpd, // ✨ Tambahan baru (untuk nanti)
     createBulkRelawanByOpd,
-    updateRelawanByOpd,      
+    updateRelawanByOpd,
     deletePenugasanByOpd, // ✨ Tambahan baru (untuk nanti)
     getPengajuanPerubahanByOpd,
     reviewPengajuanByOpd
