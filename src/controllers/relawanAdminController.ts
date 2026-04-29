@@ -24,7 +24,7 @@ export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<vo
         const result = await executeQueryWithContext(`
             SELECT 
                 u.user_id, u.nik, u.nama_lengkap, u.no_hp, u.is_active,
-                r.relawan_id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
+                r.relawan_id, r.relawan_id AS id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
                 pr.penugasan_id, pr.penugasan, pr.jabatan, pr.detail_jabatan,
                 pr.status_keaktifan AS status_penugasan,
                 o.nama_opd, k.nama_kader,
@@ -71,7 +71,40 @@ export const getRelawanById = async (req: AuthRequest, res: Response): Promise<v
             res.status(404).json({ success: false, message: 'Data relawan tidak ditemukan' });
             return;
         }
-        res.status(200).json({ success: true, message: 'Berhasil mengambil detail relawan', data: result.rows[0] });
+
+        const baseData = {
+            id: result.rows[0].relawan_id,
+            user_id: result.rows[0].user_id,
+            nik: result.rows[0].nik,
+            nama_lengkap: result.rows[0].nama_lengkap,
+            no_hp: result.rows[0].no_hp,
+            foto_profil: result.rows[0].foto_profil,
+            is_active: result.rows[0].is_active,
+            relawan_id: result.rows[0].relawan_id,
+            jenis_kelamin: result.rows[0].jenis_kelamin,
+            alamat_ktp: result.rows[0].alamat_ktp,
+            kelurahan: result.rows[0].kelurahan,
+            assignments: [] as any[]
+        };
+
+        for (const row of result.rows) {
+            if (row.penugasan_id) {
+                baseData.assignments.push({
+                    penugasan_id: row.penugasan_id,
+                    penugasan: row.penugasan,
+                    jabatan: row.jabatan,
+                    detail_jabatan: row.detail_jabatan,
+                    status_keaktifan: row.status_penugasan,
+                    nomor_sk_manual: row.nomor_sk_manual,
+                    opd_id: row.opd_id,
+                    kader_id: row.kader_id,
+                    nama_opd: row.nama_opd,
+                    nama_kader: row.nama_kader
+                });
+            }
+        }
+
+        res.status(200).json({ success: true, message: 'Berhasil mengambil detail relawan', data: baseData });
     } catch (error: any) {
         console.error('Error in getRelawanById:', error);
         res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
@@ -442,8 +475,8 @@ export const getkaderByOpd = async (req: AuthRequest, res: Response): Promise<vo
     const { opd_id } = req.query;
     try {
         const result = opd_id
-            ? await executeQueryWithContext(`SELECT kader_id, nama_kader, opd_id, is_active FROM kader WHERE opd_id = $1 ORDER BY nama_kader`, [opd_id], req.user)
-            : await executeQueryWithContext(`SELECT kader_id, nama_kader, opd_id, is_active FROM kader ORDER BY nama_kader`, [], req.user);
+            ? await executeQueryWithContext(`SELECT kader_id, kader_id AS id, nama_kader, nama_kader AS nama, opd_id, is_active, sk_id FROM kader WHERE opd_id = $1 ORDER BY nama_kader`, [opd_id], req.user)
+            : await executeQueryWithContext(`SELECT kader_id, kader_id AS id, nama_kader, nama_kader AS nama, opd_id, is_active, sk_id FROM kader ORDER BY nama_kader`, [], req.user);
         res.status(200).json({ success: true, data: result.rows });
     } catch (error: any) {
         console.error('Error in getkaderByOpd:', error);
@@ -456,6 +489,10 @@ export const getkaderByOpd = async (req: AuthRequest, res: Response): Promise<vo
 // ─────────────────────────────────────────────────────────────────────────────
 export const updateRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
     const relawanId = parseInt(req.params.relawan_id as string);
+    if (isNaN(relawanId)) {
+        res.status(400).json({ success: false, message: 'ID Relawan tidak valid.' });
+        return;
+    }
     const { nama_lengkap, alamat_ktp, kelurahan, jenis_kelamin, assignments } = req.body;
 
     const client = await pool.connect();

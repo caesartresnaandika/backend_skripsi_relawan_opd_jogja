@@ -24,7 +24,7 @@ export const getRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promi
         const result = await executeQueryWithContext(`
             SELECT 
                 u.user_id, u.nik, u.nama_lengkap, u.is_active,
-                r.relawan_id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
+                r.relawan_id, r.relawan_id AS id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
                 pr.penugasan_id, pr.jabatan, pr.detail_jabatan,
                 pr.status_keaktifan AS status_penugasan,
                 pr.opd_id, pr.kader_id,
@@ -330,6 +330,11 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
 export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     const opdId     = req.opd_id!;
     const relawanId = parseInt(req.params.relawan_id as string);
+
+    if (isNaN(relawanId)) {
+        res.status(400).json({ success: false, message: 'ID Relawan tidak valid.' });
+        return;
+    }
     const { nama_lengkap, alamat_ktp, kelurahan, jenis_kelamin, assignments } = req.body;
 
     const client = await pool.connect();
