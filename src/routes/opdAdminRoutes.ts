@@ -21,6 +21,8 @@ import {
     createBulkRelawanByOpd,
     updateRelawanByOpd,      
     deletePenugasanByOpd, // ✨ Tambahan baru (untuk nanti)
+    getPengajuanPerubahanByOpd,
+    reviewPengajuanByOpd
 } from '../controllers/opdRelawanController';
 
 const router = Router();
@@ -48,6 +50,11 @@ router.post('/relawan/bulk', createBulkRelawanByOpd); // ✨ (Excel Bulk khusus 
 router.get('/sk', getSkByOpd);
 router.put('/relawan/:relawan_id', updateRelawanByOpd);
 router.delete('/relawan/penugasan/:penugasan_id', deletePenugasanByOpd);
+
+// 4. Pengajuan Perubahan Data (Khusus OPD)
+// TARUH DI ATAS /relawan/:id JIKA ADA AGAR TIDAK BENTROK
+router.get('/relawan/pengajuan', getPengajuanPerubahanByOpd);
+router.post('/relawan/pengajuan/:id/review', reviewPengajuanByOpd);
 
 
 export default router;
