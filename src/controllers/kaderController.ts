@@ -245,7 +245,7 @@ export const toggleKaderStatus = async (req: AuthRequest, res: Response): Promis
             // Otomatis menonaktifkan semua penugasan relawan di bawah kader ini
             await executeQueryWithContext(`
                 UPDATE penugasan_relawan 
-                SET status_keaktifan = 'Nonaktif', updated_at = CURRENT_TIMESTAMP
+                SET status_keaktifan = 'Tidak Aktif', updated_at = CURRENT_TIMESTAMP
                 WHERE kader_id = $1 AND status_keaktifan = 'Aktif'
             `, [id], req.user);
         }

@@ -442,8 +442,8 @@ export const getkaderByOpd = async (req: AuthRequest, res: Response): Promise<vo
     const { opd_id } = req.query;
     try {
         const result = opd_id
-            ? await executeQueryWithContext(`SELECT kader_id, nama_kader, opd_id FROM kader WHERE opd_id = $1 ORDER BY nama_kader`, [opd_id], req.user)
-            : await executeQueryWithContext(`SELECT kader_id, nama_kader, opd_id FROM kader ORDER BY nama_kader`, [], req.user);
+            ? await executeQueryWithContext(`SELECT kader_id, nama_kader, opd_id, is_active FROM kader WHERE opd_id = $1 ORDER BY nama_kader`, [opd_id], req.user)
+            : await executeQueryWithContext(`SELECT kader_id, nama_kader, opd_id, is_active FROM kader ORDER BY nama_kader`, [], req.user);
         res.status(200).json({ success: true, data: result.rows });
     } catch (error: any) {
         console.error('Error in getkaderByOpd:', error);
@@ -482,17 +482,24 @@ export const updateRelawan = async (req: AuthRequest, res: Response): Promise<vo
                     const r = await client.query(`SELECT opd_id FROM opd WHERE LOWER(TRIM(nama_opd)) = LOWER(TRIM($1)) LIMIT 1`, [assign.opd]);
                     if (r.rows.length > 0) opdId = r.rows[0].opd_id;
                 }
+
+                // ✨ Mapping status "Nonaktif" -> "Tidak Aktif" (sesuai ENUM DB)
+                let statusKeaktifan = assign.statusKeaktifan || 'Aktif';
+                if (statusKeaktifan === 'Nonaktif') {
+                    statusKeaktifan = 'Tidak Aktif';
+                }
+
                 if (assign.penugasan_id) {
                     await client.query(`
                         UPDATE penugasan_relawan
                         SET opd_id = $1, kader_id = $2, jabatan = $3, detail_jabatan = $4, status_keaktifan = $5, updated_at = CURRENT_TIMESTAMP
                         WHERE penugasan_id = $6
-                    `, [opdId, assign.kader_id || null, assign.peran || null, assign.detail || null, assign.statusKeaktifan || 'Aktif', assign.penugasan_id]);
+                    `, [opdId, assign.kader_id || null, assign.peran || null, assign.detail || null, statusKeaktifan, assign.penugasan_id]);
                 } else {
                     await client.query(`
                         INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, status_keaktifan)
                         VALUES ($1,$2,$3,$4,$5,$6)
-                    `, [relawanId, opdId, assign.kader_id || null, assign.peran || null, assign.detail || null, assign.statusKeaktifan || 'Aktif']);
+                    `, [relawanId, opdId, assign.kader_id || null, assign.peran || null, assign.detail || null, statusKeaktifan]);
                 }
             }
         }

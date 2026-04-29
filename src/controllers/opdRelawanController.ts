@@ -362,17 +362,23 @@ export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
 
         if (Array.isArray(assignments)) {
             for (const assign of assignments) {
+                // ✨ Mapping status "Nonaktif" -> "Tidak Aktif" (sesuai ENUM DB)
+                let statusKeaktifan = assign.statusKeaktifan || 'Aktif';
+                if (statusKeaktifan === 'Nonaktif') {
+                    statusKeaktifan = 'Tidak Aktif';
+                }
+
                 if (assign.penugasan_id) {
                     await client.query(`
                         UPDATE penugasan_relawan
                         SET kader_id = $1, jabatan = $2, detail_jabatan = $3, status_keaktifan = $4, updated_at = CURRENT_TIMESTAMP
                         WHERE penugasan_id = $5 AND opd_id = $6
-                    `, [assign.kader_id || null, assign.peran || null, assign.detail || null, assign.statusKeaktifan || 'Aktif', assign.penugasan_id, opdId]);
+                    `, [assign.kader_id || null, assign.peran || null, assign.detail || null, statusKeaktifan, assign.penugasan_id, opdId]);
                 } else {
                     await client.query(`
                         INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, status_keaktifan)
                         VALUES ($1,$2,$3,$4,$5,$6)
-                    `, [relawanId, opdId, assign.kader_id || null, assign.peran || null, assign.detail || null, assign.statusKeaktifan || 'Aktif']);
+                    `, [relawanId, opdId, assign.kader_id || null, assign.peran || null, assign.detail || null, statusKeaktifan]);
                 }
             }
         }
