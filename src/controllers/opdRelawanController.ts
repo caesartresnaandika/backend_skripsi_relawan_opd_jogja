@@ -406,3 +406,90 @@ export const deletePenugasanByOpd = async (req: OpdAuthRequest, res: Response): 
         res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
     }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. Pengajuan Perubahan Data (Khusus OPD)
+// ─────────────────────────────────────────────────────────────────────────────
+export const getPengajuanPerubahanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
+    try {
+        const result = await executeQueryWithContext(`
+            SELECT 
+                pp.pengajuan_id, pp.jenis_perubahan, pp.status, pp.tanggal_pengajuan,
+                pp.catatan_relawan, pp.data_baru, pp.data_lama,
+                u.nama_lengkap, u.nik, r.relawan_id
+            FROM pengajuan_perubahan_data pp
+            JOIN relawan r ON pp.relawan_id = r.relawan_id
+            JOIN users u ON r.user_id = u.user_id
+            WHERE EXISTS (
+                SELECT 1 FROM penugasan_relawan pr 
+                WHERE pr.relawan_id = r.relawan_id AND pr.opd_id = $1
+            )
+            ORDER BY pp.tanggal_pengajuan DESC
+        `, [req.opd_id], req.user);
+        res.status(200).json({ success: true, data: result.rows });
+    } catch (error: any) {
+        console.error('Error in getPengajuanPerubahanByOpd:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+export const reviewPengajuanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const { status, catatan_verifikator } = req.body;
+    const opdId = req.opd_id;
+
+    if (!['Disetujui', 'Ditolak'].includes(status)) {
+        res.status(400).json({ success: false, message: "Status harus 'Disetujui' atau 'Ditolak'" });
+        return;
+    }
+
+    const statusDB = status === 'Disetujui' ? 'Diterima' : 'Ditolak';
+
+    try {
+        // Pastikan pengajuan ada, menunggu review, dan milik relawan di OPD ini
+        const pengajuanRes = await executeQueryWithContext(`
+            SELECT pp.* FROM pengajuan_perubahan_data pp
+            WHERE pp.pengajuan_id = $1 
+              AND pp.status = 'Menunggu Review'
+              AND EXISTS (
+                  SELECT 1 FROM penugasan_relawan pr 
+                  WHERE pr.relawan_id = pp.relawan_id AND pr.opd_id = $2
+              )
+        `, [id, opdId], req.user);
+
+        if (pengajuanRes.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Pengajuan tidak ditemukan, sudah direview, atau bukan milik instansi Anda' });
+            return;
+        }
+
+        const pengajuan = pengajuanRes.rows[0];
+        await executeQueryWithContext(`
+            UPDATE pengajuan_perubahan_data 
+            SET status = $1, catatan_verifikator = $2,
+                tanggal_verifikasi = CURRENT_TIMESTAMP, verifikator_id = $3
+            WHERE pengajuan_id = $4
+        `, [statusDB, catatan_verifikator || null, req.user!.id, id], req.user);
+
+        if (status === 'Disetujui' && pengajuan.data_baru) {
+            const dataBaru = typeof pengajuan.data_baru === 'string'
+                ? JSON.parse(pengajuan.data_baru) : pengajuan.data_baru;
+            if (dataBaru.nama_lengkap) {
+                await executeQueryWithContext(
+                    `UPDATE users SET nama_lengkap = $1 WHERE user_id = (SELECT user_id FROM relawan WHERE relawan_id = $2)`,
+                    [dataBaru.nama_lengkap, pengajuan.relawan_id], req.user
+                );
+            }
+            if (dataBaru.alamat_ktp) {
+                await executeQueryWithContext(
+                    `UPDATE relawan SET alamat_ktp = $1 WHERE relawan_id = $2`,
+                    [dataBaru.alamat_ktp, pengajuan.relawan_id], req.user
+                );
+            }
+        }
+
+        res.status(200).json({ success: true, message: `Pengajuan berhasil ${status === 'Disetujui' ? 'disetujui' : 'ditolak'}` });
+    } catch (error: any) {
+        console.error('Error in reviewPengajuanByOpd:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
