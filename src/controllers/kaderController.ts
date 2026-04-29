@@ -835,7 +835,7 @@ export const assignPicKader = async (req: AuthRequest, res: Response): Promise<v
 export const getPicKaderHistory = async (req: AuthRequest, res: Response): Promise<void> => {
     const kaderId = parseInt(req.params.id as string);
     try {
-        const result = await executeQueryWithContext(`
+        let query = `
             SELECT
                 pk.pic_kader_id,
                 pk.kader_id,
@@ -850,9 +850,20 @@ export const getPicKaderHistory = async (req: AuthRequest, res: Response): Promi
             FROM pic_kader pk
             JOIN relawan r ON pk.relawan_id = r.relawan_id
             JOIN users u   ON r.user_id = u.user_id
+            JOIN kader k   ON pk.kader_id = k.kader_id
             WHERE pk.kader_id = $1
-            ORDER BY pk.created_at DESC
-        `, [kaderId], req.user);
+        `;
+        const params: any[] = [kaderId];
+
+        if (req.user?.role === 'opd') {
+            const opdId = (req as any).opd_id || (req.user as any).opd_id;
+            query += ` AND k.opd_id = $2`;
+            params.push(opdId);
+        }
+
+        query += ` ORDER BY pk.created_at DESC`;
+
+        const result = await executeQueryWithContext(query, params, req.user);
 
         res.status(200).json({ success: true, data: result.rows });
     } catch (error: any) {
