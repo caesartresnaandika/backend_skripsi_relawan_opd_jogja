@@ -95,7 +95,7 @@ export const login = async (req: Request, res: Response) => {
                 opd_id: opd_id
             },
             process.env.JWT_SECRET || 'rahasia_skripsi_caesar',
-            { expiresIn: '2h' }
+            { expiresIn: '1h' }
         );
 
         // 5. Kirim Respons Lengkap ke Frontend

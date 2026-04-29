@@ -10,7 +10,7 @@ export const getMyProfile = async (req: AuthRequest, res: Response): Promise<voi
 
     try {
         const result = await executeQueryWithContext(
-            `SELECT user_id, nik, nama_lengkap, no_hp, role
+            `SELECT user_id, nik, nama_lengkap, no_hp, role, foto_profil
              FROM users
              WHERE user_id = $1`,
             [userId], req.user
@@ -32,7 +32,7 @@ export const getMyProfile = async (req: AuthRequest, res: Response): Promise<voi
 // Update nama_lengkap dan no_hp (NIK tidak boleh diubah)
 export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
     const userId = req.user?.id;
-    const { nama_lengkap, no_hp } = req.body;
+    const { nama_lengkap, no_hp, foto_profil } = req.body;
 
     if (!nama_lengkap) {
         res.status(400).json({ success: false, message: 'Nama lengkap wajib diisi' });
@@ -40,13 +40,19 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
     }
 
     try {
-        const result = await executeQueryWithContext(
-            `UPDATE users
-             SET nama_lengkap = $1, no_hp = $2, updated_at = CURRENT_TIMESTAMP
-             WHERE user_id = $3
-             RETURNING user_id, nik, nama_lengkap, no_hp, role`,
-            [nama_lengkap, no_hp || null, userId], req.user
-        );
+        let updateQuery = `UPDATE users SET nama_lengkap = $1, no_hp = $2, updated_at = CURRENT_TIMESTAMP`;
+        const params: any[] = [nama_lengkap, no_hp || null];
+
+        // Jika foto_profil dikirim dari frontend, tambahkan ke query update
+        if (foto_profil !== undefined) {
+            params.push(foto_profil === '' ? null : foto_profil);
+            updateQuery += `, foto_profil = $${params.length}`;
+        }
+
+        params.push(userId);
+        updateQuery += ` WHERE user_id = $${params.length} RETURNING user_id, nik, nama_lengkap, no_hp, role, foto_profil`;
+
+        const result = await executeQueryWithContext(updateQuery, params, req.user);
 
         if (result.rows.length === 0) {
             res.status(404).json({ success: false, message: 'User tidak ditemukan' });
