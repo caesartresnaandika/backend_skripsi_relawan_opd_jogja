@@ -58,6 +58,10 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
         res.status(400).json({ success: false, message: 'Field nama_opd wajib diisi' });
         return;
     }
+    if (nama_opd.length > 100) {
+        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh lebih dari 100 karakter' });
+        return;
+    }
     if (!nik_pic) {
         res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
         return;

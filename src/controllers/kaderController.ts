@@ -17,8 +17,8 @@ export const getAllKader = async (req: AuthRequest, res: Response): Promise<void
         if (opd_id) {
             query = `
                 SELECT
-                    k.kader_id, k.nama_kader, k.deskripsi, k.opd_id,
-                    k.is_active, k.created_at, k.updated_at, o.nama_opd,
+                    k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
+                    k.is_active, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
                     u.nama_lengkap AS pic_nama,
                     u.nik          AS pic_nik,
                     u.no_hp        AS pic_no_hp,
@@ -36,8 +36,8 @@ export const getAllKader = async (req: AuthRequest, res: Response): Promise<void
         } else {
             query = `
                 SELECT
-                    k.kader_id, k.nama_kader, k.deskripsi, k.opd_id,
-                    k.is_active, k.created_at, k.updated_at, o.nama_opd,
+                    k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
+                    k.is_active, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
                     u.nama_lengkap AS pic_nama,
                     u.nik          AS pic_nik,
                     u.no_hp        AS pic_no_hp,
@@ -64,9 +64,9 @@ export const getKaderById = async (req: AuthRequest, res: Response): Promise<voi
     const { id } = req.params;
     try {
         const query = `
-            SELECT
-                k.kader_id, k.nama_kader, k.deskripsi, k.opd_id,
-                k.is_active, k.created_at, k.updated_at, o.nama_opd,
+            SELECT 
+                k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
+                k.is_active, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
                 u.nama_lengkap AS pic_nama,
                 u.nik          AS pic_nik,
                 u.no_hp        AS pic_no_hp,
@@ -435,8 +435,8 @@ export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise
 
         const result = await executeQueryWithContext(`
             SELECT
-                k.kader_id, k.nama_kader, k.deskripsi, k.opd_id,
-                k.is_active, k.created_at, k.updated_at, o.nama_opd,
+                k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
+                k.is_active, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
                 u.nama_lengkap AS pic_nama,
                 u.nik          AS pic_nik,
                 u.no_hp        AS pic_no_hp,
