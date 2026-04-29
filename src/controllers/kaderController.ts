@@ -242,24 +242,12 @@ export const toggleKaderStatus = async (req: AuthRequest, res: Response): Promis
     try {
         // ── Validasi hanya saat MENONAKTIFKAN ──
         if (!is_active) {
-            const cekRelawan = await executeQueryWithContext(`
-                SELECT COUNT(*) as total
-                FROM penugasan_relawan pr
-                JOIN relawan r ON pr.relawan_id = r.relawan_id
-                JOIN users u ON r.user_id = u.user_id
-                WHERE pr.kader_id = $1
-                  AND pr.status_keaktifan = 'Aktif'
-                  AND u.is_active = true
+            // Otomatis menonaktifkan semua penugasan relawan di bawah kader ini
+            await executeQueryWithContext(`
+                UPDATE penugasan_relawan 
+                SET status_keaktifan = 'Nonaktif', updated_at = CURRENT_TIMESTAMP
+                WHERE kader_id = $1 AND status_keaktifan = 'Aktif'
             `, [id], req.user);
-
-            const totalRelawan = parseInt(cekRelawan.rows[0].total, 10);
-            if (totalRelawan > 0) {
-                res.status(400).json({
-                    success: false,
-                    message: `Kader tidak dapat dinonaktifkan karena masih terdapat ${totalRelawan} relawan aktif di kader ini. Nonaktifkan relawan terlebih dahulu.`
-                });
-                return;
-            }
         }
 
         // ── Update status ──
