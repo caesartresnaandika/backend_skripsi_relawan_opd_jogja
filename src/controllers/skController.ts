@@ -455,21 +455,23 @@ export const updateSKStatus = async (req: AuthRequest, res: Response): Promise<v
     const { id } = req.params;
     const { status, is_active } = req.body;
 
-    let normalizedStatus: 'Aktif' | 'Nonaktif' | null = null;
+    let normalizedStatus: 'Aktif' | 'Tidak Aktif' | null = null;
     if (typeof status === 'string') {
-        const trimmedStatus = status.trim();
-        if (trimmedStatus === 'Aktif' || trimmedStatus === 'Nonaktif') {
-            normalizedStatus = trimmedStatus;
+        const trimmedStatus = status.trim().toLowerCase();
+        if (trimmedStatus === 'aktif') {
+            normalizedStatus = 'Aktif';
+        } else if (trimmedStatus === 'nonaktif' || trimmedStatus === 'tidak aktif') {
+            normalizedStatus = 'Tidak Aktif';
         }
     } else if (typeof is_active === 'boolean') {
-        normalizedStatus = is_active ? 'Aktif' : 'Nonaktif';
+        normalizedStatus = is_active ? 'Aktif' : 'Tidak Aktif';
     }
 
     if (!normalizedStatus) {
         res.status(400).json({
             success: false,
             message: 'Status wajib diisi',
-            hint: "Gunakan status: 'Aktif' atau 'Nonaktif'"
+            hint: "Gunakan status: 'Aktif' atau 'Tidak Aktif'"
         });
         return;
     }
