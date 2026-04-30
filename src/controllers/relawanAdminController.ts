@@ -27,6 +27,7 @@ export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<vo
                 r.relawan_id, r.relawan_id AS id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
                 pr.penugasan_id, pr.penugasan, pr.jabatan, pr.detail_jabatan,
                 pr.status_keaktifan AS status_penugasan,
+                pr.opd_id, pr.kader_id, pr.sk_id, pr.nomor_sk_manual,
                 o.nama_opd, k.nama_kader,
                 sk.tanggal_terbit, sk.batas_aktif
             FROM users u
