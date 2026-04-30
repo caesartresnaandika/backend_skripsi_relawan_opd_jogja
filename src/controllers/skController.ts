@@ -453,10 +453,24 @@ export const createSK = async (req: AuthRequest, res: Response): Promise<void> =
 // 6. Update Status SK
 export const updateSKStatus = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, is_active } = req.body;
 
-    if (!status) {
-        res.status(400).json({ success: false, message: 'Status wajib diisi' });
+    let normalizedStatus: 'Aktif' | 'Nonaktif' | null = null;
+    if (typeof status === 'string') {
+        const trimmedStatus = status.trim();
+        if (trimmedStatus === 'Aktif' || trimmedStatus === 'Nonaktif') {
+            normalizedStatus = trimmedStatus;
+        }
+    } else if (typeof is_active === 'boolean') {
+        normalizedStatus = is_active ? 'Aktif' : 'Nonaktif';
+    }
+
+    if (!normalizedStatus) {
+        res.status(400).json({
+            success: false,
+            message: 'Status wajib diisi',
+            hint: "Gunakan status: 'Aktif' atau 'Nonaktif'"
+        });
         return;
     }
 
@@ -484,7 +498,7 @@ export const updateSKStatus = async (req: AuthRequest, res: Response): Promise<v
             WHERE sk_id = $2
             RETURNING *;
         `;
-        const result = await executeQueryWithContext(query, [status, id], req.user);
+        const result = await executeQueryWithContext(query, [normalizedStatus, id], req.user);
 
         if (result.rows.length === 0) {
             res.status(404).json({ success: false, message: 'Data SK tidak ditemukan' });
@@ -493,7 +507,7 @@ export const updateSKStatus = async (req: AuthRequest, res: Response): Promise<v
 
         res.status(200).json({
             success: true,
-            message: `Status SK berhasil diperbarui menjadi ${status}`,
+            message: `Status SK berhasil diperbarui menjadi ${normalizedStatus}`,
             data: result.rows[0]
         });
     } catch (error: any) {
