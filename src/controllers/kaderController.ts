@@ -99,6 +99,32 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
         res.status(400).json({ success: false, message: 'Field opd_id dan nama_kader wajib diisi' });
         return;
     }
+    if (nama_kader.length < 3) {
+        res.status(400).json({ success: false, message: 'Nama Kader minimal 3 karakter' });
+        return;
+    }
+    if (nama_kader.length > 100) {
+        res.status(400).json({ success: false, message: 'Nama Kader tidak boleh lebih dari 100 karakter' });
+        return;
+    }
+    if (!/^[a-zA-Z\s]+$/.test(nama_kader)) {
+        res.status(400).json({ success: false, message: 'Nama Kader tidak boleh mengandung angka atau karakter spesial' });
+        return;
+    }
+    if (nama_pic) {
+        if (nama_pic.length < 3) {
+            res.status(400).json({ success: false, message: 'Nama PIC minimal 3 karakter' });
+            return;
+        }
+        if (nama_pic.length > 100) {
+            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh lebih dari 100 karakter' });
+            return;
+        }
+        if (!/^[a-zA-Z\s]+$/.test(nama_pic)) {
+            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka atau karakter spesial' });
+            return;
+        }
+    }
     if (!nik_pic) {
         res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
         return;
@@ -192,6 +218,18 @@ export const updateKader = async (req: AuthRequest, res: Response): Promise<void
     const { nama_kader, deskripsi } = req.body;
     if (!nama_kader) {
         res.status(400).json({ success: false, message: 'Field nama_kader wajib diisi' });
+        return;
+    }
+    if (nama_kader.length < 3) {
+        res.status(400).json({ success: false, message: 'Nama Kader minimal 3 karakter' });
+        return;
+    }
+    if (nama_kader.length > 100) {
+        res.status(400).json({ success: false, message: 'Nama Kader tidak boleh lebih dari 100 karakter' });
+        return;
+    }
+    if (!/^[a-zA-Z\s]+$/.test(nama_kader)) {
+        res.status(400).json({ success: false, message: 'Nama Kader tidak boleh mengandung angka atau karakter spesial' });
         return;
     }
     try {
@@ -469,6 +507,32 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
         res.status(400).json({ success: false, message: 'Nama kader wajib diisi' });
         return;
     }
+    if (nama_kader.length < 3) {
+        res.status(400).json({ success: false, message: 'Nama Kader minimal 3 karakter' });
+        return;
+    }
+    if (nama_kader.length > 100) {
+        res.status(400).json({ success: false, message: 'Nama Kader tidak boleh lebih dari 100 karakter' });
+        return;
+    }
+    if (!/^[a-zA-Z\s]+$/.test(nama_kader)) {
+        res.status(400).json({ success: false, message: 'Nama Kader tidak boleh mengandung angka atau karakter spesial' });
+        return;
+    }
+    if (nama_pic) {
+        if (nama_pic.length < 3) {
+            res.status(400).json({ success: false, message: 'Nama PIC minimal 3 karakter' });
+            return;
+        }
+        if (nama_pic.length > 100) {
+            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh lebih dari 100 karakter' });
+            return;
+        }
+        if (!/^[a-zA-Z\s]+$/.test(nama_pic)) {
+            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka atau karakter spesial' });
+            return;
+        }
+    }
     if (!nik_pic) {
         res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
         return;
@@ -551,6 +615,23 @@ export const updateKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
         const opdId = req.opd_id;
         const kaderId = parseInt(req.params.id as string);
         const { nama_kader, deskripsi } = req.body;
+
+        if (!nama_kader) {
+            res.status(400).json({ success: false, message: 'Nama kader wajib diisi' });
+            return;
+        }
+        if (nama_kader.length < 3) {
+            res.status(400).json({ success: false, message: 'Nama Kader minimal 3 karakter' });
+            return;
+        }
+        if (nama_kader.length > 100) {
+            res.status(400).json({ success: false, message: 'Nama Kader tidak boleh lebih dari 100 karakter' });
+            return;
+        }
+        if (!/^[a-zA-Z\s]+$/.test(nama_kader)) {
+            res.status(400).json({ success: false, message: 'Nama Kader tidak boleh mengandung angka atau karakter spesial' });
+            return;
+        }
 
         const findQuery = await executeQueryWithContext(
             `SELECT kader_id FROM kader WHERE kader_id = $1 AND opd_id = $2`, [kaderId, opdId], req.user
@@ -753,6 +834,20 @@ export const assignPicKader = async (req: AuthRequest, res: Response): Promise<v
     if (!nik_pic) {
         res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
         return;
+    }
+    if (nama_pic) {
+        if (nama_pic.length < 3) {
+            res.status(400).json({ success: false, message: 'Nama PIC minimal 3 karakter' });
+            return;
+        }
+        if (nama_pic.length > 100) {
+            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh lebih dari 100 karakter' });
+            return;
+        }
+        if (!/^[a-zA-Z\s]+$/.test(nama_pic)) {
+            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka atau karakter spesial' });
+            return;
+        }
     }
     if (String(nik_pic).length !== 16) {
         res.status(400).json({ success: false, message: 'NIK PIC harus 16 digit' });

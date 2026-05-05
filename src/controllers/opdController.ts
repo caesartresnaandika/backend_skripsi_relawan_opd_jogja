@@ -58,9 +58,41 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
         res.status(400).json({ success: false, message: 'Field nama_opd wajib diisi' });
         return;
     }
+    if (nama_opd.length < 3) {
+        res.status(400).json({ success: false, message: 'Nama OPD minimal 3 karakter' });
+        return;
+    }
     if (nama_opd.length > 100) {
         res.status(400).json({ success: false, message: 'Nama OPD tidak boleh lebih dari 100 karakter' });
         return;
+    }
+    if (!/^[a-zA-Z\s]+$/.test(nama_opd)) {
+        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh mengandung angka atau karakter spesial' });
+        return;
+    }
+    if (alamat) {
+        if (alamat.length < 5) {
+            res.status(400).json({ success: false, message: 'Alamat OPD minimal 5 karakter' });
+            return;
+        }
+        if (/^\d+$/.test(alamat)) {
+            res.status(400).json({ success: false, message: 'Alamat OPD tidak boleh hanya berisi angka' });
+            return;
+        }
+        if (!/^[a-zA-Z0-9\s.,\-\/]+$/.test(alamat)) {
+            res.status(400).json({ success: false, message: 'Alamat OPD tidak boleh mengandung karakter spesial yang tidak valid' });
+            return;
+        }
+    }
+    if (nama_pic) {
+        if (nama_pic.length < 3) {
+            res.status(400).json({ success: false, message: 'Nama PIC minimal 3 karakter' });
+            return;
+        }
+        if (!/^[a-zA-Z\s]+$/.test(nama_pic)) {
+            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka atau karakter spesial' });
+            return;
+        }
     }
     if (!nik_pic) {
         res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
@@ -211,6 +243,32 @@ export const updateOpd = async (req: AuthRequest, res: Response): Promise<void> 
     if (!nama_opd) {
         res.status(400).json({ success: false, message: 'Field nama_opd wajib diisi' });
         return;
+    }
+    if (nama_opd.length < 3) {
+        res.status(400).json({ success: false, message: 'Nama OPD minimal 3 karakter' });
+        return;
+    }
+    if (nama_opd.length > 100) {
+        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh lebih dari 100 karakter' });
+        return;
+    }
+    if (!/^[a-zA-Z\s]+$/.test(nama_opd)) {
+        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh mengandung angka atau karakter spesial' });
+        return;
+    }
+    if (alamat) {
+        if (alamat.length < 5) {
+            res.status(400).json({ success: false, message: 'Alamat OPD minimal 5 karakter' });
+            return;
+        }
+        if (/^\d+$/.test(alamat)) {
+            res.status(400).json({ success: false, message: 'Alamat OPD tidak boleh hanya berisi angka' });
+            return;
+        }
+        if (!/^[a-zA-Z0-9\s.,\-\/]+$/.test(alamat)) {
+            res.status(400).json({ success: false, message: 'Alamat OPD tidak boleh mengandung karakter spesial yang tidak valid' });
+            return;
+        }
     }
     try {
         const result = await executeQueryWithContext(
