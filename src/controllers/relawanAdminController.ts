@@ -27,9 +27,9 @@ export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<vo
                 r.relawan_id, r.relawan_id AS id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
                 pr.penugasan_id, pr.penugasan, pr.jabatan, pr.detail_jabatan,
                 pr.status_keaktifan AS status_penugasan,
-                pr.opd_id, pr.kader_id, pr.sk_id, pr.nomor_sk_manual,
+                pr.opd_id, pr.kader_id, pr.sk_id,
                 o.nama_opd, k.nama_kader,
-                sk.tanggal_terbit, sk.batas_aktif
+                sk.nomor_sk, sk.tanggal_terbit, sk.batas_aktif
             FROM users u
             JOIN relawan r ON u.user_id = r.user_id
             LEFT JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
@@ -57,14 +57,16 @@ export const getRelawanById = async (req: AuthRequest, res: Response): Promise<v
                 u.user_id, u.nik, u.nama_lengkap, u.no_hp, u.foto_profil, u.is_active,
                 r.relawan_id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
                 pr.penugasan_id, pr.penugasan, pr.jabatan, pr.detail_jabatan,
-                pr.status_keaktifan AS status_penugasan, pr.nomor_sk_manual,
+                pr.status_keaktifan AS status_penugasan, pr.sk_id,
                 pr.opd_id, pr.kader_id,
-                o.nama_opd, k.nama_kader
+                o.nama_opd, k.nama_kader,
+                sk.nomor_sk
             FROM users u
             JOIN relawan r ON u.user_id = r.user_id
             LEFT JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
             LEFT JOIN opd o ON pr.opd_id = o.opd_id
             LEFT JOIN kader k ON pr.kader_id = k.kader_id
+            LEFT JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id
             WHERE u.user_id = $1 AND u.role = 'relawan'
         `, [id], req.user);
 
@@ -96,7 +98,8 @@ export const getRelawanById = async (req: AuthRequest, res: Response): Promise<v
                     jabatan: row.jabatan,
                     detail_jabatan: row.detail_jabatan,
                     status_keaktifan: row.status_penugasan,
-                    nomor_sk_manual: row.nomor_sk_manual,
+                    nomor_sk: row.nomor_sk,
+                    sk_id: row.sk_id,
                     opd_id: row.opd_id,
                     kader_id: row.kader_id,
                     nama_opd: row.nama_opd,
