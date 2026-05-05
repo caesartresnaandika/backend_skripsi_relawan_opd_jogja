@@ -12,7 +12,7 @@ export const getMyHistory = async (req: RelawanAuthRequest, res: Response): Prom
             riwayatPenugasanRes,
             riwayatPengajuanRes
         ] = await Promise.all([
-            // 1. History Penugasan (Semua status termasuk yang sudah Selesai)
+            // 1. History Penugasan (Semua status)
             executeQueryWithContext(`
                 SELECT 
                     pr.status_keaktifan, pr.created_at, pr.updated_at,

@@ -88,6 +88,14 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
         res.status(400).json({ success: false, message: 'NIK dan Nama wajib diisi' });
         return;
     }
+    if (nama_lengkap.length < 3) {
+        res.status(400).json({ success: false, message: 'Nama Lengkap minimal 3 karakter' });
+        return;
+    }
+    if (!/^[a-zA-Z\s]+$/.test(nama_lengkap)) {
+        res.status(400).json({ success: false, message: 'Nama Lengkap tidak boleh mengandung angka atau karakter spesial' });
+        return;
+    }
 
     const client = await pool.connect();
     try {
@@ -339,6 +347,16 @@ export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
 
     const client = await pool.connect();
     try {
+        if (nama_lengkap) {
+            if (nama_lengkap.length < 3) {
+                res.status(400).json({ success: false, message: 'Nama Lengkap minimal 3 karakter' });
+                return;
+            }
+            if (!/^[a-zA-Z\s]+$/.test(nama_lengkap)) {
+                res.status(400).json({ success: false, message: 'Nama Lengkap tidak boleh mengandung angka atau karakter spesial' });
+                return;
+            }
+        }
         await client.query('BEGIN');
         await setClientContext(client, req.user!, opdId);
 
