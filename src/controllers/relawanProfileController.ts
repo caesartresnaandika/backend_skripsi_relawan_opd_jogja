@@ -76,11 +76,13 @@ export const getMyPenugasan = async (req: RelawanAuthRequest, res: Response): Pr
         const result = await executeQueryWithContext(`
             SELECT 
                 pr.penugasan_id, pr.jabatan, pr.detail_jabatan, 
-                pr.status_keaktifan, pr.nomor_sk_manual,
-                o.nama_opd, k.nama_kader
+                pr.status_keaktifan,
+                o.nama_opd, k.nama_kader,
+                sk.nomor_sk
             FROM penugasan_relawan pr
             JOIN opd o ON pr.opd_id = o.opd_id
             LEFT JOIN kader k ON pr.kader_id = k.kader_id
+            LEFT JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id
             WHERE pr.relawan_id = $1
             ORDER BY pr.created_at DESC
         `, [req.relawan_id], req.user);
