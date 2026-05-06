@@ -2,6 +2,7 @@
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { RelawanAuthRequest } from '../middleware/relawanMiddleware';
+import bcrypt from 'bcrypt';
 
 // 1. Get Detail Lengkap Biodata
 export const getMyProfile = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
@@ -93,3 +94,68 @@ export const getMyPenugasan = async (req: RelawanAuthRequest, res: Response): Pr
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };
+
+// 4. Ubah Password Relawan
+export const changePassword = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
+    const { old_password, new_password } = req.body;
+    const userId = req.user?.id;
+
+    // Validasi input
+    if (!old_password || !new_password) {
+        res.status(400).json({ success: false, message: 'Password lama dan password baru wajib diisi.' });
+        return;
+    }
+
+    if (new_password.length < 8) {
+        res.status(400).json({ success: false, message: 'Password baru minimal 8 karakter.' });
+        return;
+    }
+
+    if (!/\d/.test(new_password)) {
+        res.status(400).json({ success: false, message: 'Password baru harus mengandung minimal 1 angka.' });
+        return;
+    }
+
+    try {
+        // 1. Ambil password saat ini dari DB
+        const userRes = await executeQueryWithContext(
+            `SELECT password FROM users WHERE user_id = $1`,
+            [userId], req.user
+        );
+
+        if (userRes.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'User tidak ditemukan.' });
+            return;
+        }
+
+        // 2. Verifikasi password lama
+        const isMatch = await bcrypt.compare(old_password + (process.env.PASSWORD_PEPPER || ''), userRes.rows[0].password);
+        if (!isMatch) {
+            res.status(400).json({ success: false, message: 'Password lama tidak sesuai.' });
+            return;
+        }
+
+        // 3. Cegah password baru sama dengan password lama
+        const isSame = await bcrypt.compare(new_password + (process.env.PASSWORD_PEPPER || ''), userRes.rows[0].password);
+        if (isSame) {
+            res.status(400).json({ success: false, message: 'Password baru tidak boleh sama dengan password lama.' });
+            return;
+        }
+
+        // 4. Hash password baru
+        const salt = await bcrypt.genSalt(10);
+        const hashedBaru = await bcrypt.hash(new_password + (process.env.PASSWORD_PEPPER || ''), salt);
+
+        // 5. Simpan password baru
+        await executeQueryWithContext(
+            `UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2`,
+            [hashedBaru, userId], req.user
+        );
+
+        res.status(200).json({ success: true, message: 'Password berhasil diubah.' });
+
+    } catch (error: any) {
+        console.error('Error in changePassword (relawan):', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan server saat mengubah password.' });
+    }
+};
