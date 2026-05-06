@@ -17,6 +17,7 @@ import saranRoutes from './src/routes/saranRoutes';
 import kaderRoutes from './src/routes/kaderRoutes';
 import profileRoutes from './src/routes/profileRoutes';
 import statistikRoutes from './src/routes/statistikRoutes';
+import settingsRoutes from './src/routes/settingsRoutes';
 
 dotenv.config();
 
@@ -49,6 +50,7 @@ app.use('/api/kader', kaderRoutes);
 app.use('/api/debug', debugRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/statistik', statistikRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Test Root
 app.get('/', (req: Request, res: Response) => {
