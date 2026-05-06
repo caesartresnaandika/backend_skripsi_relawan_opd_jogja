@@ -40,6 +40,8 @@ export const getAllSK = async (req: AuthRequest, res: Response): Promise<void> =
 
         const result = await executeQueryWithContext(query, params, req.user);
 
+        console.log(`[getAllSK] role=${userRole}, opd_id=${opdId}, result_count=${result.rows.length}`);
+
         res.status(200).json({
             success: true,
             message: 'Berhasil mengambil daftar Surat Keputusan',
@@ -582,6 +584,46 @@ export const deleteSK = async (req: AuthRequest, res: Response): Promise<void> =
         });
     } catch (error: any) {
         console.error('Error in deleteSK:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server' });
+    }
+};
+
+// 8. Dapatkan daftar kader berdasarkan OPD (untuk dropdown Target Kader di upload SK)
+export const getKaderListForSK = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userRole = req.user?.role;
+        const userOpdId = (req.user as any)?.opd_id;
+
+        // Untuk OPD user, paksa pakai opd_id dari token (keamanan)
+        // Untuk super_admin, ambil dari query parameter
+        let opdId: string | number | undefined;
+        if (userRole === 'opd') {
+            if (!userOpdId) {
+                res.status(403).json({ success: false, message: 'Akses ditolak: OPD ID tidak ditemukan' });
+                return;
+            }
+            opdId = userOpdId;
+        } else {
+            opdId = req.query.opd_id as string;
+        }
+
+        if (!opdId) {
+            res.status(400).json({ success: false, message: 'OPD ID wajib disertakan' });
+            return;
+        }
+
+        const result = await executeQueryWithContext(
+            `SELECT kader_id, nama_kader, opd_id, is_active
+             FROM kader
+             WHERE opd_id = $1 AND is_active IS NOT FALSE
+             ORDER BY nama_kader ASC`,
+            [opdId],
+            req.user
+        );
+
+        res.status(200).json({ success: true, data: result.rows });
+    } catch (error: any) {
+        console.error('Error in getKaderListForSK:', error);
         res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server' });
     }
 };
