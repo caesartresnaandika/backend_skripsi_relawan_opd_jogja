@@ -20,6 +20,19 @@ CREATE TABLE IF NOT EXISTS public.audit_logs
 ALTER TABLE IF EXISTS public.audit_logs
     ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS public.hotline_settings
+(
+    id serial NOT NULL,
+    telepon character varying(50) COLLATE pg_catalog."default" NOT NULL,
+    whatsapp character varying(50) COLLATE pg_catalog."default" NOT NULL,
+    jam_layanan character varying(100) COLLATE pg_catalog."default" NOT NULL,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT hotline_settings_pkey PRIMARY KEY (id)
+);
+
+ALTER TABLE IF EXISTS public.hotline_settings
+    ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.kader
 (
     kader_id serial NOT NULL,
