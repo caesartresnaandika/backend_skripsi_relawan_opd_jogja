@@ -183,7 +183,7 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
 
         // ── LANGKAH 2: INSERT kader (tanpa kolom PIC) ──
         const kaderRes = await client.query(
-            `INSERT INTO kader (opd_id, nama_kader, deskripsi) VALUES ($1, $2, $3) RETURNING kader_id, nama_kader`,
+            `INSERT INTO kader (opd_id, nama_kader, deskripsi, is_active) VALUES ($1, $2, $3, true) RETURNING kader_id, nama_kader`,
             [opd_id, nama_kader, deskripsi || null]
         );
         const kaderId = kaderRes.rows[0].kader_id;
@@ -583,7 +583,7 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
 
         // ── INSERT kader (tanpa kolom PIC) ──
         const kaderRes = await client.query(
-            `INSERT INTO kader (opd_id, nama_kader, deskripsi) VALUES ($1, $2, $3) RETURNING kader_id, nama_kader`,
+            `INSERT INTO kader (opd_id, nama_kader, deskripsi, is_active) VALUES ($1, $2, $3, true) RETURNING kader_id, nama_kader`,
             [opdId, nama_kader, deskripsi || null]
         );
         const kaderId = kaderRes.rows[0].kader_id;

@@ -9,7 +9,8 @@ import {
     getOPDList,
     createSK,
     updateSKStatus,
-    deleteSK
+    deleteSK,
+    getKaderListForSK
 } from '../controllers/skController';
 
 const router = Router();
@@ -54,6 +55,9 @@ router.get('/', getAllSK);
 
 // URL: GET /api/admin/sk/opd-list (Dropdown OPD)
 router.get('/opd-list', getOPDList);
+
+// URL: GET /api/admin/sk/kader-list?opd_id=1 (Dropdown Kader untuk upload SK)
+router.get('/kader-list', getKaderListForSK);
 
 // URL: POST /api/admin/sk (Upload PDF)
 router.post('/', upload.single('file'), handleMulterError, createSK);
