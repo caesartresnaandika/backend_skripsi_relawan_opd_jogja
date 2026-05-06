@@ -5,6 +5,19 @@ import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { OpdAuthRequest } from '../middleware/opdMiddleware';
 
+// ── RLS context helpers ──────────────────────────────────────────────────────
+const setClientContextAdmin = async (client: any, user: NonNullable<AuthRequest['user']>) => {
+    await client.query("SELECT set_config('app.current_user_id', $1, true)", [user.id.toString()]);
+    await client.query("SELECT set_config('app.current_user_role', $1, true)", [user.role]);
+    await client.query("SELECT set_config('app.current_opd_id', $1, true)", [(user.opd_id ?? 0).toString()]);
+};
+
+const setClientContextOpd = async (client: any, user: NonNullable<OpdAuthRequest['user']>, opdId?: number) => {
+    await client.query("SELECT set_config('app.current_user_id', $1, true)", [user.id.toString()]);
+    await client.query("SELECT set_config('app.current_user_role', $1, true)", [user.role]);
+    await client.query("SELECT set_config('app.current_opd_id', $1, true)", [(opdId ?? user.opd_id ?? 0).toString()]);
+};
+
 // ============================================================
 // SUPER ADMIN — dipakai via /api/kader (kaderRoutes.ts)
 // ============================================================
@@ -137,6 +150,7 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+        await setClientContextAdmin(client, req.user!);  // ← wajib untuk RLS
 
         // ── LANGKAH 1: Cari atau buat user + relawan dari NIK PIC ──
         let relawanId: number;
@@ -372,6 +386,7 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
             // ── 3. TRANSAKSI DATABASE PER BARIS DIMULAI ──
             try {
                 await client.query('BEGIN');
+                await setClientContextAdmin(client, req.user!);  // ← wajib untuk RLS
 
                 // Validasi OPD
                 const opdCheck = await client.query(
@@ -545,8 +560,8 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+        await setClientContextOpd(client, req.user!, opdId);  // ← wajib untuk RLS
 
-        // ── Cari atau buat relawan dari NIK PIC ──
         let relawanId: number;
         const checkUser = await client.query(`SELECT user_id FROM users WHERE nik = $1`, [nik_pic]);
 
@@ -747,6 +762,7 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
 
             try {
                 await client.query('BEGIN');
+                await setClientContextOpd(client, req.user!, opdId);  // ← wajib untuk RLS
 
                 // ── Cari atau buat relawan dari NIK PIC ──
                 let relawanId: number;
