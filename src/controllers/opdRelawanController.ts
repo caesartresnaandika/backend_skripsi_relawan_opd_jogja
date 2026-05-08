@@ -475,10 +475,14 @@ export const reviewPengajuanByOpd = async (req: OpdAuthRequest, res: Response): 
     }
 
     const statusDB = status === 'Disetujui' ? 'Diterima' : 'Ditolak';
+    const client = await pool.connect();
 
     try {
+        await client.query('BEGIN');
+        await setClientContext(client, req.user!, opdId);
+
         // Pastikan pengajuan ada, menunggu review, dan milik relawan di OPD ini
-        const pengajuanRes = await executeQueryWithContext(`
+        const pengajuanRes = await client.query(`
             SELECT pp.* FROM pengajuan_perubahan_data pp
             WHERE pp.pengajuan_id = $1 
               AND pp.status = 'Menunggu Review'
@@ -486,41 +490,57 @@ export const reviewPengajuanByOpd = async (req: OpdAuthRequest, res: Response): 
                   SELECT 1 FROM penugasan_relawan pr 
                   WHERE pr.relawan_id = pp.relawan_id AND pr.opd_id = $2
               )
-        `, [id, opdId], req.user);
+        `, [id, opdId]);
 
         if (pengajuanRes.rows.length === 0) {
+            await client.query('ROLLBACK');
             res.status(404).json({ success: false, message: 'Pengajuan tidak ditemukan, sudah direview, atau bukan milik instansi Anda' });
             return;
         }
 
         const pengajuan = pengajuanRes.rows[0];
-        await executeQueryWithContext(`
+
+        let dataBaru = null;
+        if (status === 'Disetujui' && pengajuan.data_baru) {
+            try {
+                dataBaru = typeof pengajuan.data_baru === 'string'
+                    ? JSON.parse(pengajuan.data_baru) : pengajuan.data_baru;
+            } catch (parseError) {
+                await client.query('ROLLBACK');
+                res.status(400).json({ success: false, message: 'Data perubahan (data_baru) rusak atau tidak valid' });
+                return;
+            }
+        }
+
+        await client.query(`
             UPDATE pengajuan_perubahan_data 
             SET status = $1, catatan_verifikator = $2,
                 tanggal_verifikasi = CURRENT_TIMESTAMP, verifikator_id = $3
             WHERE pengajuan_id = $4
-        `, [statusDB, catatan_verifikator || null, req.user!.id, id], req.user);
+        `, [statusDB, catatan_verifikator || null, req.user!.id, id]);
 
-        if (status === 'Disetujui' && pengajuan.data_baru) {
-            const dataBaru = typeof pengajuan.data_baru === 'string'
-                ? JSON.parse(pengajuan.data_baru) : pengajuan.data_baru;
+        if (status === 'Disetujui' && dataBaru) {
             if (dataBaru.nama_lengkap) {
-                await executeQueryWithContext(
+                await client.query(
                     `UPDATE users SET nama_lengkap = $1 WHERE user_id = (SELECT user_id FROM relawan WHERE relawan_id = $2)`,
-                    [dataBaru.nama_lengkap, pengajuan.relawan_id], req.user
+                    [dataBaru.nama_lengkap, pengajuan.relawan_id]
                 );
             }
             if (dataBaru.alamat_ktp) {
-                await executeQueryWithContext(
+                await client.query(
                     `UPDATE relawan SET alamat_ktp = $1 WHERE relawan_id = $2`,
-                    [dataBaru.alamat_ktp, pengajuan.relawan_id], req.user
+                    [dataBaru.alamat_ktp, pengajuan.relawan_id]
                 );
             }
         }
 
+        await client.query('COMMIT');
         res.status(200).json({ success: true, message: `Pengajuan berhasil ${status === 'Disetujui' ? 'disetujui' : 'ditolak'}` });
     } catch (error: any) {
+        await client.query('ROLLBACK');
         console.error('Error in reviewPengajuanByOpd:', error);
         res.status(500).json({ success: false, message: 'Server error' });
+    } finally {
+        client.release();
     }
 };
