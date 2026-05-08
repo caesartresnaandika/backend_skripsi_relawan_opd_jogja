@@ -1,6 +1,6 @@
 //opdController
 import { Response } from 'express';
-import { executeQueryWithContext } from '../../config/db';
+import pool, { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import bcrypt from 'bcrypt';
 
@@ -62,8 +62,8 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
         res.status(400).json({ success: false, message: 'Nama OPD minimal 3 karakter' });
         return;
     }
-    if (nama_opd.length > 100) {
-        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh lebih dari 100 karakter' });
+    if (nama_opd.length > 255) {
+        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh lebih dari 255 karakter' });
         return;
     }
     if (!/^[a-zA-Z\s]+$/.test(nama_opd)) {
@@ -179,45 +179,73 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
                 errors.push('Satu baris dilewati: kolom namaOpd kosong');
                 continue;
             }
+            if (namaOpd.length > 255) {
+                errors.push(`"${namaOpd}": Nama OPD melebihi batas 255 karakter`);
+                continue;
+            }
             if (!nikPic || nikPic.length !== 16) {
                 errors.push(`"${namaOpd}": NIK PIC harus 16 digit (diterima: "${nikPic}")`);
                 continue;
             }
 
-            const checkNik = await executeQueryWithContext(
-                `SELECT user_id FROM users WHERE nik = $1`, [nikPic], req.user
-            );
-            if (checkNik.rows.length > 0) {
-                skipped.push(`"${namaOpd}" (NIK ${nikPic} sudah terdaftar)`);
-                continue;
+            const client = await pool.connect();
+            try {
+                await client.query('BEGIN');
+                
+                // Set context
+                if (req.user && req.user.id) {
+                    await client.query("SELECT set_config('app.current_user_id', $1, true);", [req.user.id.toString()]);
+                    await client.query("SELECT set_config('app.current_user_role', $1, true);", [req.user.role]);
+                    const opdId = (req.user as any).opd_id;
+                    await client.query("SELECT set_config('app.current_opd_id', $1, true);", [(opdId ?? 0).toString()]);
+                    if (req.user.ip) {
+                        await client.query("SELECT set_config('app.current_user_ip', $1, true);", [req.user.ip]);
+                    }
+                }
+
+                const checkNik = await client.query(
+                    `SELECT user_id FROM users WHERE nik = $1`, [nikPic]
+                );
+                if (checkNik.rows.length > 0) {
+                    skipped.push(`"${namaOpd}" (NIK ${nikPic} sudah terdaftar)`);
+                    await client.query('ROLLBACK');
+                    client.release();
+                    continue;
+                }
+
+                // Buat akun user
+                const salt = await bcrypt.genSalt(10);
+                const hashedPassword = await bcrypt.hash(nikPic + (process.env.PASSWORD_PEPPER || ''), salt);
+                const userRes = await client.query(
+                    `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                     VALUES ($1, $2, $3, $4, 'opd', true) RETURNING user_id`,
+                    [nikPic, pic || namaOpd, kontak, hashedPassword]
+                );
+                const userId = userRes.rows[0].user_id;
+
+                // Insert OPD (tanpa pic/nik_pic/kontak)
+                const opdRes = await client.query(
+                    `INSERT INTO opd (nama_opd, alamat, is_active)
+                     VALUES ($1, $2, true) RETURNING opd_id`,
+                    [namaOpd, alamat]
+                );
+                const opdId = opdRes.rows[0].opd_id;
+
+                // Ikat di pengelola_opd (dengan kolom baru)
+                await client.query(
+                    `INSERT INTO pengelola_opd (user_id, opd_id, jabatan, tanggal_mulai, status)
+                     VALUES ($1, $2, 'Pengelola OPD', CURRENT_DATE, 'Aktif')`,
+                    [userId, opdId]
+                );
+
+                await client.query('COMMIT');
+                inserted.push(namaOpd);
+            } catch (err: any) {
+                await client.query('ROLLBACK');
+                errors.push(`"${namaOpd}": ${err.message}`);
+            } finally {
+                client.release();
             }
-
-            // Buat akun user
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(nikPic + (process.env.PASSWORD_PEPPER || ''), salt);
-            const userRes = await executeQueryWithContext(
-                `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
-                 VALUES ($1, $2, $3, $4, 'opd', true) RETURNING user_id`,
-                [nikPic, pic || namaOpd, kontak, hashedPassword], req.user
-            );
-            const userId = userRes.rows[0].user_id;
-
-            // Insert OPD (tanpa pic/nik_pic/kontak)
-            const opdRes = await executeQueryWithContext(
-                `INSERT INTO opd (nama_opd, alamat, is_active)
-                 VALUES ($1, $2, true) RETURNING opd_id`,
-                [namaOpd, alamat], req.user
-            );
-            const opdId = opdRes.rows[0].opd_id;
-
-            // Ikat di pengelola_opd (dengan kolom baru)
-            await executeQueryWithContext(
-                `INSERT INTO pengelola_opd (user_id, opd_id, jabatan, tanggal_mulai, status)
-                 VALUES ($1, $2, 'Pengelola OPD', CURRENT_DATE, 'Aktif')`,
-                [userId, opdId], req.user
-            );
-
-            inserted.push(namaOpd);
         }
 
         const totalOk = inserted.length;
@@ -225,7 +253,7 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
         if (skipped.length > 0) parts.push(`${skipped.length} baris dilewati (NIK sudah ada).`);
         if (errors.length > 0) parts.push(`${errors.length} baris gagal karena data tidak valid.`);
 
-        res.status(totalOk > 0 ? 201 : 400).json({
+        res.status(totalOk > 0 ? 201 : (errors.length > 0 ? 400 : 200)).json({
             success: totalOk > 0,
             message: parts.join(' '),
             data: { insertedCount: totalOk, skipped, errors }
@@ -248,8 +276,8 @@ export const updateOpd = async (req: AuthRequest, res: Response): Promise<void> 
         res.status(400).json({ success: false, message: 'Nama OPD minimal 3 karakter' });
         return;
     }
-    if (nama_opd.length > 100) {
-        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh lebih dari 100 karakter' });
+    if (nama_opd.length > 255) {
+        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh lebih dari 255 karakter' });
         return;
     }
     if (!/^[a-zA-Z\s]+$/.test(nama_opd)) {

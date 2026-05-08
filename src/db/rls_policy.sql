@@ -151,3 +151,4 @@ FROM public.users u
 LEFT JOIN public.relawan r ON u.user_id = r.user_id
 WHERE u.role = 'relawan' 
   AND r.relawan_id IS NULL;
+
