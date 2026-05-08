@@ -275,10 +275,6 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
             if (!kaderId && namaKader && namaKader !== '-') {
                 const r = await client.query(`SELECT kader_id FROM kader WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) AND opd_id = $2 LIMIT 1`, [namaKader, opdId]);
                 if (r.rows.length > 0) kaderId = r.rows[0].kader_id;
-                else {
-                    const fb = await client.query(`SELECT kader_id FROM kader WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) LIMIT 1`, [namaKader]);
-                    if (fb.rows.length > 0) kaderId = fb.rows[0].kader_id;
-                }
             }
             await client.query(`
                 INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, penugasan, status_keaktifan)
@@ -437,10 +433,6 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     if (!kaderId && namaKader && namaKader !== '-') {
                         const r = await client.query(`SELECT kader_id FROM kader WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) AND opd_id = $2 LIMIT 1`, [namaKader, opdId]);
                         if (r.rows.length > 0) kaderId = r.rows[0].kader_id;
-                        else {
-                            const fb = await client.query(`SELECT kader_id FROM kader WHERE LOWER(TRIM(nama_kader)) = LOWER(TRIM($1)) LIMIT 1`, [namaKader]);
-                            if (fb.rows.length > 0) kaderId = fb.rows[0].kader_id;
-                        }
                     }
 
                     const jabatan = assign.peran || assign.jabatan || null;
