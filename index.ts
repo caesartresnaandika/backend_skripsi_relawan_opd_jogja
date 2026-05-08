@@ -27,7 +27,8 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Jika frontend lupa menaruh '/api' di URL (misal: /auth/login), 
+// Jika frontend lupa menaruh '/api' di URL (misal: /auth/
+// login), 
 // middleware ini akan otomatis mengarahkannya ke /api/auth/login
 app.use((req, res, next) => {
     if (!req.url.startsWith('/api') && req.url !== '/') {
