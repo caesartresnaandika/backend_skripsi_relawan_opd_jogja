@@ -12,8 +12,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
             totalKaderRes,
             pengajuanPendingRes,
             relawanPerOpdRes,
-            demografiGenderRes,
-            demografiUmurRes
+            demografiGenderRes
         ] = await Promise.all([
             // 1. Total Relawan Aktif
             executeQueryWithContext(`
@@ -56,24 +55,6 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
                 JOIN users u ON r.user_id = u.user_id 
                 WHERE u.is_active = true
                 GROUP BY jenis_kelamin
-            `, [], req.user),
-
-            // 7. Demografi: Range Umur
-            executeQueryWithContext(`
-                SELECT 
-                    CASE 
-                        WHEN EXTRACT(YEAR FROM age(tanggal_lahir)) < 20 THEN '< 20 Tahun'
-                        WHEN EXTRACT(YEAR FROM age(tanggal_lahir)) BETWEEN 20 AND 29 THEN '20 - 29 Tahun'
-                        WHEN EXTRACT(YEAR FROM age(tanggal_lahir)) BETWEEN 30 AND 39 THEN '30 - 39 Tahun'
-                        WHEN EXTRACT(YEAR FROM age(tanggal_lahir)) BETWEEN 40 AND 49 THEN '40 - 49 Tahun'
-                        ELSE '50+ Tahun'
-                    END AS range_umur,
-                    COUNT(*) AS jumlah
-                FROM relawan r
-                JOIN users u ON r.user_id = u.user_id 
-                WHERE u.is_active = true AND tanggal_lahir IS NOT NULL
-                GROUP BY range_umur
-                ORDER BY range_umur ASC
             `, [], req.user)
         ]);
 
@@ -96,10 +77,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
                     jenis_kelamin: row.jenis_kelamin,
                     jumlah: parseInt(row.jumlah, 10)
                 })),
-                demografi_umur: demografiUmurRes.rows.map(row => ({
-                    range_umur: row.range_umur,
-                    jumlah: parseInt(row.jumlah, 10)
-                }))
+                demografi_umur: []
             }
         });
 
