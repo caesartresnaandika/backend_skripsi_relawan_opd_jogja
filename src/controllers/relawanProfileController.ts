@@ -95,7 +95,36 @@ export const getMyPenugasan = async (req: RelawanAuthRequest, res: Response): Pr
     }
 };
 
-// 4. Ubah Password Relawan
+// 4. Verifikasi Password Lama (untuk validasi real-time di frontend)
+export const verifyCurrentPassword = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
+    const { password } = req.body;
+    const userId = req.user?.id;
+
+    if (!password) {
+        res.status(400).json({ success: false, match: false, message: 'Password wajib diisi.' });
+        return;
+    }
+
+    try {
+        const userRes = await executeQueryWithContext(
+            `SELECT password FROM users WHERE user_id = $1`,
+            [userId], req.user
+        );
+
+        if (userRes.rows.length === 0) {
+            res.status(404).json({ success: false, match: false, message: 'User tidak ditemukan.' });
+            return;
+        }
+
+        const isMatch = await bcrypt.compare(password + (process.env.PASSWORD_PEPPER || ''), userRes.rows[0].password);
+        res.status(200).json({ success: true, match: isMatch });
+    } catch (error: any) {
+        console.error('Error in verifyCurrentPassword (relawan):', error);
+        res.status(500).json({ success: false, match: false, message: 'Terjadi kesalahan server.' });
+    }
+};
+
+// 5. Ubah Password Relawan
 export const changePassword = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
     const { old_password, new_password } = req.body;
     const userId = req.user?.id;
