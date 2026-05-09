@@ -56,4 +56,7 @@ router.post('/profile/update', relawanProfileController_1.requestProfileUpdate);
 router.get('/history', relawanHistoryController_1.getMyHistory);
 // 4. Penugasan
 router.get('/penugasan', relawanProfileController_1.getMyPenugasan);
+// 5. Ubah Password
+router.post('/verify-password', relawanProfileController_1.verifyCurrentPassword);
+router.post('/change-password', relawanProfileController_1.changePassword);
 exports.default = router;
