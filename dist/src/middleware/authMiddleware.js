@@ -31,7 +31,12 @@ const verifyToken = (req, res, next) => {
         next();
     }
     catch (err) {
-        res.status(400).json({ message: 'Token Tidak Valid!' });
+        if (err.name === 'TokenExpiredError') {
+            res.status(401).json({ message: 'Sesi anda telah berakhir. Silakan login kembali.' });
+            return;
+        }
+        res.status(401).json({ message: 'Token Tidak Valid!' });
+        return;
     }
 };
 // === MIDDLEWARE KHUSUS RBAC (ROLE-BASED ACCESS CONTROL) ===

@@ -18,8 +18,14 @@ const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
-// === 1. FITUR REGISTRASI ===
+// === 1. FITUR REGISTRASI (Dilindungi Setup Key) ===
 const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    // ── Validasi Setup Key ──
+    // Hanya request dengan header X-Setup-Key yang benar yang diizinkan
+    const setupKey = req.headers['x-setup-key'];
+    if (!setupKey || setupKey !== process.env.SETUP_SECRET_KEY) {
+        return res.status(403).json({ message: 'Akses Ditolak! Setup key tidak valid.' });
+    }
     const { nik, nama_lengkap, password, role } = req.body;
     try {
         // Cek apakah NIK sudah ada
@@ -28,8 +34,9 @@ const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             return res.status(400).json({ message: 'NIK sudah terdaftar!' });
         }
         // Enkripsi Password (Hashing)
-        const salt = yield bcrypt_1.default.genSalt(10);
-        const hashedPassword = yield bcrypt_1.default.hash(password, salt);
+        const salt = yield bcrypt_1.default.genSalt(12);
+        // Register
+        const hashedPassword = yield bcrypt_1.default.hash(password + process.env.PASSWORD_PEPPER, salt);
         // Masukkan ke Database
         const newUser = yield db_1.default.query('INSERT INTO users (nik, nama_lengkap, password, role) VALUES ($1, $2, $3, $4) RETURNING *', [nik, nama_lengkap, hashedPassword, role]);
         res.json({ message: 'Registrasi Berhasil!', user: newUser.rows[0] });
@@ -51,7 +58,7 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         }
         const user = userQuery.rows[0];
         // 2. Cek Password
-        const validPassword = yield bcrypt_1.default.compare(password, user.password);
+        const validPassword = yield bcrypt_1.default.compare(password + process.env.PASSWORD_PEPPER, user.password);
         if (!validPassword) {
             return res.status(400).json({ message: 'Password salah!' });
         }
@@ -64,7 +71,7 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 SELECT po.opd_id, o.nama_opd 
                 FROM pengelola_opd po
                 JOIN opd o ON po.opd_id = o.opd_id
-                WHERE po.user_id = $1
+                WHERE po.user_id = $1 AND po.status = 'Aktif'
             `, [user.user_id]);
             if (opdQuery.rows.length > 0) {
                 opd_id = opdQuery.rows[0].opd_id;
@@ -80,7 +87,7 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             id: user.user_id,
             role: user.role,
             opd_id: opd_id
-        }, process.env.JWT_SECRET || 'rahasia_skripsi_caesar', { expiresIn: '2h' });
+        }, process.env.JWT_SECRET || 'rahasia_skripsi_caesar', { expiresIn: '1h' });
         // 5. Kirim Respons Lengkap ke Frontend
         res.json({
             message: 'Login Berhasil!',

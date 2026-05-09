@@ -21,11 +21,21 @@ const saranRoutes_1 = __importDefault(require("./src/routes/saranRoutes"));
 const kaderRoutes_1 = __importDefault(require("./src/routes/kaderRoutes"));
 const profileRoutes_1 = __importDefault(require("./src/routes/profileRoutes"));
 const statistikRoutes_1 = __importDefault(require("./src/routes/statistikRoutes"));
+const settingsRoutes_1 = __importDefault(require("./src/routes/settingsRoutes"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
+// Jika frontend lupa menaruh '/api' di URL (misal: /auth/
+// login), 
+// middleware ini akan otomatis mengarahkannya ke /api/auth/login
+app.use((req, res, next) => {
+    if (!req.url.startsWith('/api') && req.url !== '/') {
+        req.url = '/api' + req.url;
+    }
+    next();
+});
 // === DAFTAR ROUTES (API MAP) ===
 app.use('/api/auth', authRoutes_1.default);
 app.use('/api/relawan', relawanRoutes_1.default);
@@ -40,6 +50,7 @@ app.use('/api/kader', kaderRoutes_1.default);
 app.use('/api/debug', debugRoutes_1.default);
 app.use('/api/profile', profileRoutes_1.default);
 app.use('/api/statistik', statistikRoutes_1.default);
+app.use('/api/settings', settingsRoutes_1.default);
 // Test Root
 app.get('/', (req, res) => {
     res.send('Server Backend Skripsi (TypeScript) Berjalan! 🚀');
