@@ -10,7 +10,8 @@ import {
     deleteKaderByOpd,
     createBulkKaderByOpd,
     assignPicKader,
-    getPicKaderHistory
+    getPicKaderHistory,
+    toggleKaderStatus
 } from '../controllers/kaderController';
 import {
     getRelawanByOpd,
@@ -39,7 +40,7 @@ router.patch('/kader/:id', updateKaderByOpd);
 router.delete('/kader/:id', deleteKaderByOpd);
 router.get('/kader/:id/pic-history', getPicKaderHistory);
 router.post('/kader/:id/assign-pic', assignPicKader);
-// 🚨 router.patch('/kader/:id/status', toggleKaderStatus); <-- BARIS INI SUDAH DIHAPUS DEMI KEAMANAN!
+router.patch('/kader/:id/status', toggleKaderStatus);
 
 // 3. Data Relawan & Surat Keputusan
 router.get('/relawan', getRelawanByOpd);
