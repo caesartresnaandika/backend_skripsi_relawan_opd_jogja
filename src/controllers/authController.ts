@@ -17,6 +17,10 @@ export const register = async (req: Request, res: Response) => {
     }
 
     const { nik, nama_lengkap, password, role } = req.body;
+    
+    if (!nik || !/^\d{16}$/.test(nik)) {
+        return res.status(400).json({ message: 'NIK harus terdiri dari tepat 16 digit angka' });
+    }
 
     try {
         // Cek apakah NIK sudah ada

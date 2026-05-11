@@ -229,6 +229,10 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
         res.status(400).json({ success: false, message: 'NIK dan Nama wajib diisi' });
         return;
     }
+    if (!/^\d{16}$/.test(nik)) {
+        res.status(400).json({ success: false, message: 'NIK harus terdiri dari tepat 16 digit angka' });
+        return;
+    }
     if (nama_lengkap.length < 3) {
         res.status(400).json({ success: false, message: 'Nama Lengkap minimal 3 karakter' });
         return;
@@ -338,6 +342,10 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
 
             if (!item.nik || !item.namaLengkap) {
                 errors.push(`Baris ${rowNumber} dilewati: NIK atau Nama kosong/tidak terbaca.`);
+                continue;
+            }
+            if (!/^\d{16}$/.test(item.nik)) {
+                errors.push(`Baris ${rowNumber} dilewati: NIK "${item.nik}" harus 16 digit angka.`);
                 continue;
             }
 

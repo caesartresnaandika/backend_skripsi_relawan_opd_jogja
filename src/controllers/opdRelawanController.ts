@@ -88,6 +88,10 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
         res.status(400).json({ success: false, message: 'NIK dan Nama wajib diisi' });
         return;
     }
+    if (!/^\d{16}$/.test(nik)) {
+        res.status(400).json({ success: false, message: 'NIK harus terdiri dari tepat 16 digit angka' });
+        return;
+    }
     if (nama_lengkap.length < 3) {
         res.status(400).json({ success: false, message: 'Nama Lengkap minimal 3 karakter' });
         return;
@@ -186,6 +190,10 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
 
             if (!nik || !namaLengkap) {
                 errors.push(`Baris ${rowNumber} dilewati: NIK atau Nama kosong/tidak terbaca.`);
+                continue;
+            }
+            if (!/^\d{16}$/.test(nik)) {
+                errors.push(`Baris ${rowNumber} dilewati: NIK "${nik}" harus 16 digit angka.`);
                 continue;
             }
 

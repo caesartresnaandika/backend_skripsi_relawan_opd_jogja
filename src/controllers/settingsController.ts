@@ -17,6 +17,8 @@ export const getHotlineSettings = async (req: Request, res: Response) => {
 export const updateHotlineSettings = async (req: Request, res: Response) => {
     try {
         const { telepon, whatsapp, jam_layanan } = req.body;
+        const userId = (req as any).user?.user_id;
+
 
         if (!telepon || !whatsapp || !jam_layanan) {
             return res.status(400).json({ success: false, message: 'Semua field (telepon, whatsapp, jam_layanan) harus diisi' });
@@ -24,17 +26,17 @@ export const updateHotlineSettings = async (req: Request, res: Response) => {
 
         const result = await pool.query(
             `UPDATE hotline_settings 
-             SET telepon = $1, whatsapp = $2, jam_layanan = $3, updated_at = NOW() 
-             RETURNING telepon, whatsapp, jam_layanan, updated_at`,
-            [telepon, whatsapp, jam_layanan]
+             SET telepon = $1, whatsapp = $2, jam_layanan = $3, updated_at = NOW(), updated_by = $4 
+             RETURNING telepon, whatsapp, jam_layanan, updated_at, updated_by`,
+            [telepon, whatsapp, jam_layanan, userId]
         );
 
         if (result.rows.length === 0) {
             // fallback if table is empty
             const insertRes = await pool.query(
-                `INSERT INTO hotline_settings (telepon, whatsapp, jam_layanan) 
-                 VALUES ($1, $2, $3) RETURNING telepon, whatsapp, jam_layanan, updated_at`,
-                [telepon, whatsapp, jam_layanan]
+                `INSERT INTO hotline_settings (telepon, whatsapp, jam_layanan, updated_by) 
+                VALUES ($1, $2, $3, $4) RETURNING telepon, whatsapp, jam_layanan, updated_at, updated_by`,
+                [telepon, whatsapp, jam_layanan, userId]
             );
             return res.json({ success: true, data: insertRes.rows[0], message: 'Hotline settings created' });
         }
