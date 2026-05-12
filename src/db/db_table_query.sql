@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS public.hotline_settings
     whatsapp character varying(50) COLLATE pg_catalog."default" NOT NULL,
     jam_layanan character varying(100) COLLATE pg_catalog."default" NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_by smallint,
     CONSTRAINT hotline_settings_pkey PRIMARY KEY (id)
 );
 
@@ -212,6 +213,13 @@ ALTER TABLE IF EXISTS public.audit_logs
     ON DELETE SET NULL;
 
 
+ALTER TABLE IF EXISTS public.hotline_settings
+    ADD CONSTRAINT fk_hotline_updated_by FOREIGN KEY (updated_by)
+    REFERENCES public.users (user_id) MATCH SIMPLE
+    ON UPDATE CASCADE
+    ON DELETE SET NULL;
+
+
 ALTER TABLE IF EXISTS public.kader
     ADD CONSTRAINT fk_kader_sk FOREIGN KEY (sk_id)
     REFERENCES public.surat_keputusan (sk_id) MATCH SIMPLE
@@ -349,5 +357,8 @@ ALTER TABLE IF EXISTS public.surat_keputusan
     REFERENCES public.opd (opd_id) MATCH SIMPLE
     ON UPDATE CASCADE
     ON DELETE CASCADE;
+
+ALTER TABLE IF EXISTS public.users
+    ADD CONSTRAINT chk_nik_format CHECK (nik ~ '^\d{16}$');
 
 END;

@@ -142,8 +142,8 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
         res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
         return;
     }
-    if (String(nik_pic).length !== 16) {
-        res.status(400).json({ success: false, message: 'NIK PIC harus 16 digit' });
+    if (!/^\d{16}$/.test(String(nik_pic))) {
+        res.status(400).json({ success: false, message: 'NIK PIC harus terdiri dari tepat 16 digit angka' });
         return;
     }
 
@@ -378,8 +378,8 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
                 errors.push(`Baris ${rowNumber} ("${namaKader}"): OPD kosong`);
                 continue;
             }
-            if (!nikPic || nikPic.length !== 16) {
-                errors.push(`Baris ${rowNumber} ("${namaKader}"): NIK PIC harus 16 digit (terdeteksi: "${nikPic}")`);
+            if (!nikPic || !/^\d{16}$/.test(nikPic)) {
+                errors.push(`Baris ${rowNumber} ("${namaKader}"): NIK PIC harus 16 digit angka (terdeteksi: "${nikPic}")`);
                 continue;
             }
 
@@ -552,8 +552,8 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
         res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
         return;
     }
-    if (String(nik_pic).length !== 16) {
-        res.status(400).json({ success: false, message: 'NIK PIC harus 16 digit' });
+    if (!/^\d{16}$/.test(String(nik_pic))) {
+        res.status(400).json({ success: false, message: 'NIK PIC harus terdiri dari tepat 16 digit angka' });
         return;
     }
 
@@ -755,8 +755,8 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
                 errors.push(`Baris ${rowNumber}: Nama Kader kosong`);
                 continue;
             }
-            if (!nikPic || nikPic.length !== 16) {
-                errors.push(`Baris ${rowNumber} ("${namaKader}"): NIK PIC harus 16 digit`);
+            if (!nikPic || !/^\d{16}$/.test(nikPic)) {
+                errors.push(`Baris ${rowNumber} ("${namaKader}"): NIK PIC harus 16 digit angka`);
                 continue;
             }
 
@@ -865,8 +865,8 @@ export const assignPicKader = async (req: AuthRequest, res: Response): Promise<v
             return;
         }
     }
-    if (String(nik_pic).length !== 16) {
-        res.status(400).json({ success: false, message: 'NIK PIC harus 16 digit' });
+    if (!/^\d{16}$/.test(String(nik_pic))) {
+        res.status(400).json({ success: false, message: 'NIK PIC harus terdiri dari tepat 16 digit angka' });
         return;
     }
 

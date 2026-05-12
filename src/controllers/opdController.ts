@@ -98,8 +98,8 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
         res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
         return;
     }
-    if (nik_pic.length !== 16) {
-        res.status(400).json({ success: false, message: 'NIK PIC harus 16 digit' });
+    if (!/^\d{16}$/.test(nik_pic)) {
+        res.status(400).json({ success: false, message: 'NIK PIC harus terdiri dari tepat 16 digit angka' });
         return;
     }
 
@@ -183,8 +183,8 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
                 errors.push(`"${namaOpd}": Nama OPD melebihi batas 255 karakter`);
                 continue;
             }
-            if (!nikPic || nikPic.length !== 16) {
-                errors.push(`"${namaOpd}": NIK PIC harus 16 digit (diterima: "${nikPic}")`);
+            if (!nikPic || !/^\d{16}$/.test(nikPic)) {
+                errors.push(`"${namaOpd}": NIK PIC harus 16 digit angka (diterima: "${nikPic}")`);
                 continue;
             }
 
