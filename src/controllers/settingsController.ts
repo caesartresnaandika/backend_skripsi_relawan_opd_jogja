@@ -3,7 +3,7 @@ import pool from '../../config/db';
 
 export const getHotlineSettings = async (req: Request, res: Response) => {
     try {
-        const result = await pool.query('SELECT telepon, whatsapp, jam_layanan, updated_at FROM hotline_settings ORDER BY id DESC LIMIT 1');
+        const result = await pool.query('SELECT telepon, whatsapp, jam_layanan, updated_at FROM hotline_settings ORDER BY id_saranhotline DESC LIMIT 1');
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, message: 'Settings not found' });
         }

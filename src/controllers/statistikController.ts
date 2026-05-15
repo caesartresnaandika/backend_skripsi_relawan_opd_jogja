@@ -15,7 +15,7 @@ export const getStatistikGender = async (req: AuthRequest, res: Response): Promi
                 FROM relawan r
                 JOIN users u ON r.user_id = u.user_id
                 JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
-                WHERE u.is_active = true AND pr.opd_id = $1
+                WHERE u.status_keaktifan = true AND pr.opd_id = $1
                 GROUP BY r.jenis_kelamin
             `, [user.opd_id], user);
         } else {
@@ -43,7 +43,7 @@ export const getStatistikKelurahan = async (req: AuthRequest, res: Response): Pr
                 FROM relawan r
                 JOIN users u ON r.user_id = u.user_id
                 JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
-                WHERE u.is_active = true
+                WHERE u.status_keaktifan = true
                   AND r.kelurahan IS NOT NULL
                   AND r.kelurahan != '-'
                   AND pr.opd_id = $1
@@ -56,7 +56,7 @@ export const getStatistikKelurahan = async (req: AuthRequest, res: Response): Pr
                 SELECT r.kelurahan, COUNT(r.relawan_id) AS jumlah
                 FROM relawan r
                 JOIN users u ON r.user_id = u.user_id
-                WHERE u.is_active = true
+                WHERE u.status_keaktifan = true
                   AND r.kelurahan IS NOT NULL
                   AND r.kelurahan != '-'
                 GROUP BY r.kelurahan
@@ -118,7 +118,7 @@ export const getKaderPerOPD = async (req: AuthRequest, res: Response): Promise<v
             result = await executeQueryWithContext(`
                 SELECT o.nama_opd AS name, COUNT(k.kader_id) AS value
                 FROM opd o
-                LEFT JOIN kader k ON o.opd_id = k.opd_id AND k.is_active = true
+                LEFT JOIN kader k ON o.opd_id = k.opd_id AND k.status_keaktifan = true
                 WHERE o.opd_id = $1
                 GROUP BY o.opd_id, o.nama_opd
             `, [user.opd_id], user);
@@ -126,8 +126,8 @@ export const getKaderPerOPD = async (req: AuthRequest, res: Response): Promise<v
             result = await executeQueryWithContext(`
                 SELECT o.nama_opd AS name, COUNT(k.kader_id) AS value
                 FROM opd o
-                LEFT JOIN kader k ON o.opd_id = k.opd_id AND k.is_active = true
-                WHERE o.is_active = true
+                LEFT JOIN kader k ON o.opd_id = k.opd_id AND k.status_keaktifan = true
+                WHERE o.status_keaktifan = true
                 GROUP BY o.opd_id, o.nama_opd
                 ORDER BY value DESC
                 LIMIT 5

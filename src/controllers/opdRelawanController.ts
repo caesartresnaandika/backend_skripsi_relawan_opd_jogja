@@ -23,7 +23,7 @@ export const getRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promi
     try {
         const result = await executeQueryWithContext(`
             SELECT 
-                u.user_id, u.nik, u.nama_lengkap, u.no_hp, u.is_active,
+                u.user_id, u.nik, u.nama_lengkap, u.no_hp, u.status_keaktifan,
                 r.relawan_id, r.relawan_id AS id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
                 pr.penugasan_id, pr.penugasan, pr.jabatan, pr.detail_jabatan,
                 pr.status_keaktifan AS status_penugasan,
@@ -115,7 +115,7 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
 
         const hashedPassword = await bcrypt.hash(nik + (process.env.PASSWORD_PEPPER || ''), await bcrypt.genSalt(10));
         const userRes = await client.query(`
-            INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+            INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
             VALUES ($1,$2,$3,$4,'relawan',true) RETURNING user_id
         `, [nik, nama_lengkap, no_hp, hashedPassword]);
         const userId = userRes.rows[0].user_id;
@@ -257,7 +257,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                     // ── NIK baru → INSERT user + relawan ──────────────────────
                     const hashedPassword = await bcrypt.hash(nik + (process.env.PASSWORD_PEPPER || ''), await bcrypt.genSalt(10));
                     const uRes = await client.query(`
-                        INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                        INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
                         VALUES ($1,$2,$3,$4,'relawan',true) RETURNING user_id
                     `, [nik, namaLengkap, noHp, hashedPassword]);
                     userId = uRes.rows[0].user_id;
@@ -453,7 +453,7 @@ export const getPengajuanPerubahanByOpd = async (req: OpdAuthRequest, res: Respo
     try {
         const result = await executeQueryWithContext(`
             SELECT 
-                pp.pengajuan_id, pp.jenis_perubahan, pp.status, pp.tanggal_pengajuan,
+                pp.pengajuan_id, pp.jenis_perubahan, pp.status_pengajuan, pp.tanggal_pengajuan,
                 pp.catatan_relawan, pp.data_baru, pp.data_lama,
                 u.nama_lengkap, u.nik, r.relawan_id
             FROM pengajuan_perubahan_data pp
@@ -493,7 +493,7 @@ export const reviewPengajuanByOpd = async (req: OpdAuthRequest, res: Response): 
         const pengajuanRes = await client.query(`
             SELECT pp.* FROM pengajuan_perubahan_data pp
             WHERE pp.pengajuan_id = $1 
-              AND pp.status = 'Menunggu Review'
+              AND pp.status_pengajuan_pengajuan = 'Menunggu Review'
               AND EXISTS (
                   SELECT 1 FROM penugasan_relawan pr 
                   WHERE pr.relawan_id = pp.relawan_id AND pr.opd_id = $2
@@ -522,7 +522,7 @@ export const reviewPengajuanByOpd = async (req: OpdAuthRequest, res: Response): 
 
         await client.query(`
             UPDATE pengajuan_perubahan_data 
-            SET status = $1, catatan_verifikator = $2,
+            SET status_pengajuan = $1, catatan_verifikator = $2,
                 tanggal_verifikasi = CURRENT_TIMESTAMP, verifikator_id = $3
             WHERE pengajuan_id = $4
         `, [statusDB, catatan_verifikator || null, req.user!.id, id]);

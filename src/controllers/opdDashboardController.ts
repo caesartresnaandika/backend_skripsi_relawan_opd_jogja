@@ -29,7 +29,7 @@ export const getOpdDashboardStats = async (req: OpdAuthRequest, res: Response): 
                 FROM penugasan_relawan pr 
                 JOIN relawan r ON pr.relawan_id = r.relawan_id
                 JOIN users u ON r.user_id = u.user_id
-                WHERE pr.opd_id = $1 AND u.is_active = true AND pr.status_keaktifan = 'Aktif'
+                WHERE pr.opd_id = $1 AND u.status_keaktifan = true AND pr.status_keaktifan = 'Aktif'
             `, [opdId], req.user),
 
             // 2. Berkas SK Terunggah milik OPD
@@ -39,7 +39,7 @@ export const getOpdDashboardStats = async (req: OpdAuthRequest, res: Response): 
 
             // 3. Jumlah Kader Aktif milik OPD
             executeQueryWithContext(`
-                SELECT COUNT(*) as total FROM kader WHERE opd_id = $1 AND is_active = true
+                SELECT COUNT(*) as total FROM kader WHERE opd_id = $1 AND status_keaktifan = true
             `, [opdId], req.user),
 
             // 4. Grafik: Relawan per Kader (kader) di OPD

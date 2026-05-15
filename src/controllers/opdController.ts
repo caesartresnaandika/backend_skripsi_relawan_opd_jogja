@@ -7,12 +7,12 @@ import bcrypt from 'bcrypt';
 export const getAllOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const query = `
-            SELECT o.opd_id, o.nama_opd, o.alamat, o.is_active, o.created_at, o.updated_at,
+            SELECT o.opd_id, o.nama_opd, o.alamat, o.status_keaktifan, o.created_at, o.updated_at,
                    u.nama_lengkap AS pic,
                    u.nik AS nik_pic,
                    u.no_hp AS kontak
             FROM opd o
-            LEFT JOIN pengelola_opd po ON o.opd_id = po.opd_id AND po.status = 'Aktif'
+            LEFT JOIN pengelola_opd po ON o.opd_id = po.opd_id AND po.status_keaktifan = 'Aktif'
             LEFT JOIN users u ON po.user_id = u.user_id
             ORDER BY o.created_at DESC;
         `;
@@ -29,12 +29,12 @@ export const getOpdById = async (req: AuthRequest, res: Response): Promise<void>
     const { id } = req.params;
     try {
         const query = `
-            SELECT o.opd_id, o.nama_opd, o.alamat, o.is_active, o.created_at, o.updated_at,
+            SELECT o.opd_id, o.nama_opd, o.alamat, o.status_keaktifan, o.created_at, o.updated_at,
                    u.nama_lengkap AS pic,
                    u.nik AS nik_pic,
                    u.no_hp AS kontak
             FROM opd o
-            LEFT JOIN pengelola_opd po ON o.opd_id = po.opd_id AND po.status = 'Aktif'
+            LEFT JOIN pengelola_opd po ON o.opd_id = po.opd_id AND po.status_keaktifan = 'Aktif'
             LEFT JOIN users u ON po.user_id = u.user_id
             WHERE o.opd_id = $1;
         `;
@@ -115,7 +115,7 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
 
         // 1. Buat akun user
         const userRes = await executeQueryWithContext(
-            `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+            `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
             VALUES ($1, $2, $3, $4, 'opd', true) RETURNING user_id`,
             [nik_pic, nama_pic || nama_opd, kontak, hashedPassword], req.user
         );
@@ -217,7 +217,7 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
                 const salt = await bcrypt.genSalt(10);
                 const hashedPassword = await bcrypt.hash(nikPic + (process.env.PASSWORD_PEPPER || ''), salt);
                 const userRes = await client.query(
-                    `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                    `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
                      VALUES ($1, $2, $3, $4, 'opd', true) RETURNING user_id`,
                     [nikPic, pic || namaOpd, kontak, hashedPassword]
                 );
@@ -225,7 +225,7 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
 
                 // Insert OPD (tanpa pic/nik_pic/kontak)
                 const opdRes = await client.query(
-                    `INSERT INTO opd (nama_opd, alamat, is_active)
+                    `INSERT INTO opd (nama_opd, alamat, status_keaktifan)
                      VALUES ($1, $2, true) RETURNING opd_id`,
                     [namaOpd, alamat]
                 );
@@ -316,16 +316,16 @@ export const updateOpd = async (req: AuthRequest, res: Response): Promise<void> 
 
 export const toggleOpdStatus = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { is_active } = req.body;
+    const { status_keaktifan } = req.body;
 
-    if (typeof is_active !== 'boolean') {
-        res.status(400).json({ success: false, message: 'Field is_active wajib diisi dan harus berupa boolean' });
+    if (typeof status_keaktifan !== 'boolean') {
+        res.status(400).json({ success: false, message: 'Field status_keaktifan wajib diisi dan harus berupa boolean' });
         return;
     }
 
     try {
         // ── Validasi hanya saat MENONAKTIFKAN ──
-        if (!is_active) {
+        if (!status_keaktifan) {
             // 1. Cek relawan aktif di OPD ini
             const cekRelawan = await executeQueryWithContext(`
                 SELECT COUNT(*) as total
@@ -334,7 +334,7 @@ export const toggleOpdStatus = async (req: AuthRequest, res: Response): Promise<
                 JOIN users u ON r.user_id = u.user_id
                 WHERE pr.opd_id = $1
                   AND pr.status_keaktifan = 'Aktif'
-                  AND u.is_active = true
+                  AND u.status_keaktifan = true
             `, [id], req.user);
 
             const totalRelawan = parseInt(cekRelawan.rows[0].total, 10);
@@ -350,7 +350,7 @@ export const toggleOpdStatus = async (req: AuthRequest, res: Response): Promise<
             const cekKader = await executeQueryWithContext(`
                 SELECT COUNT(*) as total
                 FROM kader
-                WHERE opd_id = $1 AND is_active = true
+                WHERE opd_id = $1 AND status_keaktifan = true
             `, [id], req.user);
 
             const totalKader = parseInt(cekKader.rows[0].total, 10);
@@ -365,15 +365,15 @@ export const toggleOpdStatus = async (req: AuthRequest, res: Response): Promise<
 
         // ── Update status ──
         const result = await executeQueryWithContext(`
-            UPDATE opd SET is_active = $1, updated_at = CURRENT_TIMESTAMP WHERE opd_id = $2 RETURNING *;
-        `, [is_active, id], req.user);
+            UPDATE opd SET status_keaktifan = $1, updated_at = CURRENT_TIMESTAMP WHERE opd_id = $2 RETURNING *;
+        `, [status_keaktifan, id], req.user);
 
         if (result.rows.length === 0) {
             res.status(404).json({ success: false, message: 'Data OPD tidak ditemukan' });
             return;
         }
 
-        const statusText = is_active ? 'diaktifkan' : 'dinonaktifkan';
+        const statusText = status_keaktifan ? 'diaktifkan' : 'dinonaktifkan';
         res.status(200).json({ success: true, message: `OPD berhasil ${statusText}`, data: result.rows[0] });
 
     } catch (error: any) {

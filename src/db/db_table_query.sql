@@ -22,13 +22,13 @@ ALTER TABLE IF EXISTS public.audit_logs
 
 CREATE TABLE IF NOT EXISTS public.hotline_settings
 (
-    id serial NOT NULL,
+    id_saranhotline integer NOT NULL DEFAULT nextval('hotline_settings_id_seq'::regclass),
     telepon character varying(50) COLLATE pg_catalog."default" NOT NULL,
     whatsapp character varying(50) COLLATE pg_catalog."default" NOT NULL,
     jam_layanan character varying(100) COLLATE pg_catalog."default" NOT NULL,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_by smallint,
-    CONSTRAINT hotline_settings_pkey PRIMARY KEY (id)
+    updated_by integer,
+    CONSTRAINT hotline_settings_pkey PRIMARY KEY (id_saranhotline)
 );
 
 ALTER TABLE IF EXISTS public.hotline_settings
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS public.kader
     deskripsi text COLLATE pg_catalog."default",
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    is_active boolean DEFAULT true,
+    status_keaktifan boolean DEFAULT true,
     sk_id integer,
     CONSTRAINT kader_pkey PRIMARY KEY (kader_id)
 );
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS public.opd
     alamat text COLLATE pg_catalog."default",
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    is_active boolean DEFAULT true,
+    status_keaktifan boolean DEFAULT true,
     CONSTRAINT opd_pkey PRIMARY KEY (opd_id)
 );
 
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS public.pengajuan_perubahan_data
     jenis_perubahan character varying(50) COLLATE pg_catalog."default" NOT NULL,
     data_lama jsonb,
     data_baru jsonb NOT NULL,
-    status status_pengajuan DEFAULT 'Menunggu Review'::status_pengajuan,
+    status_pengajuan status_pengajuan DEFAULT 'Menunggu Review'::status_pengajuan,
     catatan_relawan text COLLATE pg_catalog."default",
     catatan_verifikator text COLLATE pg_catalog."default",
     tanggal_pengajuan timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
@@ -85,16 +85,16 @@ ALTER TABLE IF EXISTS public.pengajuan_perubahan_data
 
 CREATE TABLE IF NOT EXISTS public.pengelola_opd
 (
-    id serial NOT NULL,
+    id_pengelola_opd integer NOT NULL DEFAULT nextval('pengelola_opd_id_seq'::regclass),
     user_id integer NOT NULL,
     opd_id integer NOT NULL,
     jabatan character varying(100) COLLATE pg_catalog."default",
     tanggal_mulai date DEFAULT CURRENT_DATE,
     tanggal_selesai date,
-    status character varying(20) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Aktif'::character varying,
+    status_keaktifan character varying(20) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Aktif'::character varying,
     sk_id integer,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pengelola_opd_pkey PRIMARY KEY (id)
+    CONSTRAINT pengelola_opd_pkey PRIMARY KEY (id_pengelola_opd)
 );
 
 ALTER TABLE IF EXISTS public.pengelola_opd
@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS public.pic_kader
     kader_id integer NOT NULL,
     tanggal_mulai date DEFAULT CURRENT_DATE,
     tanggal_selesai date,
-    status character varying(20) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Aktif'::character varying,
+    status_keaktifan character varying(20) COLLATE pg_catalog."default" NOT NULL DEFAULT 'Aktif'::character varying,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     sk_id integer,
     CONSTRAINT pic_kader_pkey PRIMARY KEY (pic_kader_id)
@@ -157,7 +157,7 @@ CREATE TABLE IF NOT EXISTS public.saran_masukan
     user_id integer NOT NULL,
     subjek character varying(255) COLLATE pg_catalog."default",
     pesan text COLLATE pg_catalog."default" NOT NULL,
-    status status_saran DEFAULT 'Menunggu'::status_saran,
+    status_keaktifan status_saran DEFAULT 'Menunggu'::status_saran,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     catatan_admin text COLLATE pg_catalog."default",
@@ -175,7 +175,7 @@ CREATE TABLE IF NOT EXISTS public.surat_keputusan
     tanggal_terbit date,
     opd_id integer NOT NULL,
     file_path text COLLATE pg_catalog."default" NOT NULL,
-    status status_keaktifan DEFAULT 'Aktif'::status_keaktifan,
+    status_keaktifan status_keaktifan DEFAULT 'Aktif'::status_keaktifan,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     batas_aktif date,
@@ -195,7 +195,7 @@ CREATE TABLE IF NOT EXISTS public.users
     nama_lengkap character varying(255) COLLATE pg_catalog."default" NOT NULL,
     no_hp character varying(15) COLLATE pg_catalog."default",
     foto_profil text COLLATE pg_catalog."default",
-    is_active boolean DEFAULT true,
+    status_keaktifan boolean DEFAULT true,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     last_login timestamp with time zone,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
@@ -357,8 +357,5 @@ ALTER TABLE IF EXISTS public.surat_keputusan
     REFERENCES public.opd (opd_id) MATCH SIMPLE
     ON UPDATE CASCADE
     ON DELETE CASCADE;
-
-ALTER TABLE IF EXISTS public.users
-    ADD CONSTRAINT chk_nik_format CHECK (nik ~ '^\d{16}$');
 
 END;
