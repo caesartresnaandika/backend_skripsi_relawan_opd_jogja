@@ -39,7 +39,7 @@ export const getAllKader = async (req: AuthRequest, res: Response): Promise<void
                     pk.tanggal_mulai AS pic_tanggal_mulai
                 FROM kader k
                 JOIN opd o ON k.opd_id = o.opd_id
-                LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status = 'Aktif'
+                LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status_keaktifan = 'Aktif'
                 LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
                 LEFT JOIN users u    ON r.user_id = u.user_id
                 WHERE k.opd_id = $1
@@ -58,7 +58,7 @@ export const getAllKader = async (req: AuthRequest, res: Response): Promise<void
                     pk.tanggal_mulai AS pic_tanggal_mulai
                 FROM kader k
                 JOIN opd o ON k.opd_id = o.opd_id
-                LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status = 'Aktif'
+                LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status_keaktifan = 'Aktif'
                 LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
                 LEFT JOIN users u    ON r.user_id = u.user_id
                 ORDER BY k.created_at DESC;
@@ -87,7 +87,7 @@ export const getKaderById = async (req: AuthRequest, res: Response): Promise<voi
                 pk.tanggal_mulai AS pic_tanggal_mulai
             FROM kader k
             JOIN opd o ON k.opd_id = o.opd_id
-            LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status = 'Aktif'
+            LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status_keaktifan = 'Aktif'
             LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
             LEFT JOIN users u    ON r.user_id = u.user_id
             WHERE k.kader_id = $1;
@@ -204,7 +204,7 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
 
         // ── LANGKAH 3: INSERT ke pic_kader ──
         await client.query(
-            `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status)
+            `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status_keaktifan)
              VALUES ($1, $2, CURRENT_DATE, 'Aktif')`,
             [relawanId, kaderId]
         );
@@ -444,7 +444,7 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
 
                 // ── INSERT pic_kader ──
                 await client.query(
-                    `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status)
+                    `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status_keaktifan)
                      VALUES ($1, $2, CURRENT_DATE, 'Aktif')`,
                     [relawanId, kaderId]
                 );
@@ -498,7 +498,7 @@ export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise
                 COUNT(pr.relawan_id) AS jumlah_anggota
             FROM kader k
             JOIN opd o ON k.opd_id = o.opd_id
-            LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status = 'Aktif'
+            LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status_keaktifan = 'Aktif'
             LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
             LEFT JOIN users u    ON r.user_id = u.user_id
             LEFT JOIN penugasan_relawan pr ON k.kader_id = pr.kader_id AND pr.status_keaktifan = 'Aktif'
@@ -605,7 +605,7 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
 
         // ── INSERT pic_kader ──
         await client.query(
-            `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status)
+            `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status_keaktifan)
              VALUES ($1, $2, CURRENT_DATE, 'Aktif')`,
             [relawanId, kaderId]
         );
@@ -808,7 +808,7 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
 
                 // ── INSERT pic_kader ──
                 await client.query(
-                    `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status)
+                    `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status_keaktifan)
                      VALUES ($1, $2, CURRENT_DATE, 'Aktif')`,
                     [relawanId, kaderId]
                 );
@@ -920,14 +920,14 @@ export const assignPicKader = async (req: AuthRequest, res: Response): Promise<v
         // ── Nonaktifkan PIC lama ──
         await client.query(
             `UPDATE pic_kader
-             SET status = 'Tidak Aktif', tanggal_selesai = CURRENT_DATE
-             WHERE kader_id = $1 AND status = 'Aktif'`,
+             SET status_keaktifan = 'Tidak Aktif', tanggal_selesai = CURRENT_DATE
+             WHERE kader_id = $1 AND status_keaktifan = 'Aktif'`,
             [kaderId]
         );
 
         // ── Insert PIC baru ──
         await client.query(
-            `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status)
+            `INSERT INTO pic_kader (relawan_id, kader_id, tanggal_mulai, status_keaktifan)
              VALUES ($1, $2, CURRENT_DATE, 'Aktif')`,
             [relawanId, kaderId]
         );
@@ -953,7 +953,7 @@ export const getPicKaderHistory = async (req: AuthRequest, res: Response): Promi
                 pk.relawan_id,
                 pk.tanggal_mulai,
                 pk.tanggal_selesai,
-                pk.status,
+                pk.status_keaktifan AS status,
                 pk.created_at,
                 u.nama_lengkap  AS pic_nama,
                 u.nik           AS pic_nik,
