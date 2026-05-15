@@ -31,7 +31,7 @@ export const getAllKader = async (req: AuthRequest, res: Response): Promise<void
             query = `
                 SELECT
                     k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
-                    k.is_active, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
+                    k.status_keaktifan, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
                     u.nama_lengkap AS pic_nama,
                     u.nik          AS pic_nik,
                     u.no_hp        AS pic_no_hp,
@@ -50,7 +50,7 @@ export const getAllKader = async (req: AuthRequest, res: Response): Promise<void
             query = `
                 SELECT
                     k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
-                    k.is_active, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
+                    k.status_keaktifan, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
                     u.nama_lengkap AS pic_nama,
                     u.nik          AS pic_nik,
                     u.no_hp        AS pic_no_hp,
@@ -79,7 +79,7 @@ export const getKaderById = async (req: AuthRequest, res: Response): Promise<voi
         const query = `
             SELECT 
                 k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
-                k.is_active, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
+                k.status_keaktifan, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
                 u.nama_lengkap AS pic_nama,
                 u.nik          AS pic_nik,
                 u.no_hp        AS pic_no_hp,
@@ -181,7 +181,7 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
             const hashedPassword = await bcrypt.hash(String(nik_pic) + (process.env.PASSWORD_PEPPER || ''), salt);
 
             const userRes = await client.query(
-                `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
                  VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
                 [nik_pic, nama_pic || '-', no_hp_pic || null, hashedPassword]
             );
@@ -197,7 +197,7 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
 
         // ── LANGKAH 2: INSERT kader (tanpa kolom PIC) ──
         const kaderRes = await client.query(
-            `INSERT INTO kader (opd_id, nama_kader, deskripsi, is_active) VALUES ($1, $2, $3, true) RETURNING kader_id, nama_kader`,
+            `INSERT INTO kader (opd_id, nama_kader, deskripsi, status_keaktifan) VALUES ($1, $2, $3, true) RETURNING kader_id, nama_kader`,
             [opd_id, nama_kader, deskripsi || null]
         );
         const kaderId = kaderRes.rows[0].kader_id;
@@ -284,16 +284,16 @@ export const deleteKader = async (req: AuthRequest, res: Response): Promise<void
 
 export const toggleKaderStatus = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { is_active } = req.body;
+    const { status_keaktifan } = req.body;
 
-    if (is_active === undefined) {
-        res.status(400).json({ success: false, message: 'Field is_active wajib diisi' });
+    if (status_keaktifan === undefined) {
+        res.status(400).json({ success: false, message: 'Field status_keaktifan wajib diisi' });
         return;
     }
 
     try {
         // ── Validasi hanya saat MENONAKTIFKAN ──
-        if (!is_active) {
+        if (!status_keaktifan) {
             // Otomatis menonaktifkan semua penugasan relawan di bawah kader ini
             await executeQueryWithContext(`
                 UPDATE penugasan_relawan 
@@ -304,17 +304,17 @@ export const toggleKaderStatus = async (req: AuthRequest, res: Response): Promis
 
         // ── Update status ──
         const result = await executeQueryWithContext(`
-            UPDATE kader SET is_active = $1, updated_at = CURRENT_TIMESTAMP
+            UPDATE kader SET status_keaktifan = $1, updated_at = CURRENT_TIMESTAMP
             WHERE kader_id = $2
-            RETURNING kader_id, nama_kader, is_active;
-        `, [is_active, id], req.user);
+            RETURNING kader_id, nama_kader, status_keaktifan;
+        `, [status_keaktifan, id], req.user);
 
         if (result.rows.length === 0) {
             res.status(404).json({ success: false, message: 'Kader tidak ditemukan' });
             return;
         }
 
-        const statusText = result.rows[0].is_active ? 'diaktifkan' : 'dinonaktifkan';
+        const statusText = result.rows[0].status_keaktifan ? 'diaktifkan' : 'dinonaktifkan';
         res.status(200).json({
             success: true,
             message: `Kader ${result.rows[0].nama_kader} berhasil ${statusText}`,
@@ -390,7 +390,7 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
 
                 // Validasi OPD
                 const opdCheck = await client.query(
-                    `SELECT opd_id FROM opd WHERE LOWER(TRIM(nama_opd)) = LOWER(TRIM($1)) AND is_active = true LIMIT 1`,
+                    `SELECT opd_id FROM opd WHERE LOWER(TRIM(nama_opd)) = LOWER(TRIM($1)) AND status_keaktifan = true LIMIT 1`,
                     [namaOpd]
                 );
                 if (opdCheck.rows.length === 0) {
@@ -422,7 +422,7 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
                     const salt = await bcrypt.genSalt(10);
                     const hashedPassword = await bcrypt.hash(nikPic + (process.env.PASSWORD_PEPPER || ''), salt);
                     const userRes = await client.query(
-                        `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                        `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
                          VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
                         [nikPic, pic || '-', noHpPic || null, hashedPassword]
                     );
@@ -437,7 +437,7 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
 
                 // ── INSERT kader (tanpa kolom PIC) ──
                 const kaderRes = await client.query(
-                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, is_active) VALUES ($1, $2, $3, true) RETURNING kader_id`,
+                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, status_keaktifan) VALUES ($1, $2, $3, true) RETURNING kader_id`,
                     [opdId, namaKader, deskripsi]
                 );
                 const kaderId = kaderRes.rows[0].kader_id;
@@ -489,7 +489,7 @@ export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise
         const result = await executeQueryWithContext(`
             SELECT
                 k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
-                k.is_active, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
+                k.status_keaktifan, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
                 u.nama_lengkap AS pic_nama,
                 u.nik          AS pic_nik,
                 u.no_hp        AS pic_no_hp,
@@ -583,7 +583,7 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash(String(nik_pic) + (process.env.PASSWORD_PEPPER || ''), salt);
             const userRes = await client.query(
-                `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
                  VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
                 [nik_pic, nama_pic || '-', no_hp_pic || null, hashedPassword]
             );
@@ -598,7 +598,7 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
 
         // ── INSERT kader (tanpa kolom PIC) ──
         const kaderRes = await client.query(
-            `INSERT INTO kader (opd_id, nama_kader, deskripsi, is_active) VALUES ($1, $2, $3, true) RETURNING kader_id, nama_kader`,
+            `INSERT INTO kader (opd_id, nama_kader, deskripsi, status_keaktifan) VALUES ($1, $2, $3, true) RETURNING kader_id, nama_kader`,
             [opdId, nama_kader, deskripsi || null]
         );
         const kaderId = kaderRes.rows[0].kader_id;
@@ -786,7 +786,7 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
                     const salt = await bcrypt.genSalt(10);
                     const hashedPassword = await bcrypt.hash(nikPic + (process.env.PASSWORD_PEPPER || ''), salt);
                     const userRes = await client.query(
-                        `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                        `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
                          VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
                         [nikPic, pic || '-', noHpPic || null, hashedPassword]
                     );
@@ -801,7 +801,7 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
 
                 // ── INSERT kader (tanpa kolom PIC) ──
                 const kaderRes = await client.query(
-                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, is_active) VALUES ($1, $2, $3, true) RETURNING kader_id`,
+                    `INSERT INTO kader (opd_id, nama_kader, deskripsi, status_keaktifan) VALUES ($1, $2, $3, true) RETURNING kader_id`,
                     [opdId, namaKader, deskripsi]
                 );
                 const kaderId = kaderRes.rows[0].kader_id;
@@ -904,7 +904,7 @@ export const assignPicKader = async (req: AuthRequest, res: Response): Promise<v
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash(String(nik_pic) + (process.env.PASSWORD_PEPPER || ''), salt);
             const userRes = await client.query(
-                `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
                  VALUES ($1, $2, $3, $4, 'relawan', true) RETURNING user_id`,
                 [nik_pic, nama_pic || '-', no_hp_pic || null, hashedPassword]
             );

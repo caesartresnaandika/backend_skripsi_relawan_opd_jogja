@@ -19,12 +19,12 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
                 SELECT COUNT(*) as total 
                 FROM relawan r 
                 JOIN users u ON r.user_id = u.user_id 
-                WHERE u.is_active = true AND u.role = 'relawan'
+                WHERE u.status_keaktifan = true AND u.role = 'relawan'
             `, [], req.user),
 
             // 2. Total OPD
             executeQueryWithContext(`
-                SELECT COUNT(*) as total FROM opd WHERE is_active = true
+                SELECT COUNT(*) as total FROM opd WHERE status_keaktifan = true
             `, [], req.user),
 
             // 3. Total Kader/kader
@@ -36,7 +36,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
             executeQueryWithContext(`
                 SELECT COUNT(*) as total 
                 FROM pengajuan_perubahan_data 
-                WHERE status = 'Menunggu Review'
+                WHERE status_pengajuan = 'Menunggu Review'
             `, [], req.user),
 
             // 5. Grafik: Relawan per OPD
@@ -53,7 +53,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
                 SELECT jenis_kelamin, COUNT(*) as jumlah
                 FROM relawan r
                 JOIN users u ON r.user_id = u.user_id 
-                WHERE u.is_active = true
+                WHERE u.status_keaktifan = true
                 GROUP BY jenis_kelamin
             `, [], req.user)
         ]);
@@ -95,9 +95,9 @@ export const getOpdDashboardStats = async (req: OpdAuthRequest, res: Response): 
                 SELECT COUNT(DISTINCT pr.relawan_id) as total 
                 FROM penugasan_relawan pr 
                 JOIN users u ON pr.relawan_id = (SELECT relawan_id FROM relawan WHERE user_id = u.user_id LIMIT 1)
-                WHERE pr.opd_id = $1 AND pr.status_keaktifan = 'Aktif' AND u.is_active = true
+                WHERE pr.opd_id = $1 AND pr.status_keaktifan = 'Aktif' AND u.status_keaktifan = true
             `, [opdId], req.user),
-            executeQueryWithContext(`SELECT COUNT(*) as total FROM kader WHERE opd_id = $1 AND is_active = true`, [opdId], req.user),
+            executeQueryWithContext(`SELECT COUNT(*) as total FROM kader WHERE opd_id = $1 AND status_keaktifan = true`, [opdId], req.user),
             executeQueryWithContext(`
                 SELECT k.nama_kader, COUNT(pr.relawan_id) as jumlah_relawan
                 FROM kader k

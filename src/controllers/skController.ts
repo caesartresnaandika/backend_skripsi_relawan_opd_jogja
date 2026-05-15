@@ -12,7 +12,7 @@ export const getAllSK = async (req: AuthRequest, res: Response): Promise<void> =
 
         let query = `
             SELECT 
-                sk.sk_id, sk.nomor_sk, sk.judul_sk, sk.tanggal_terbit, sk.batas_aktif, sk.status,
+                sk.sk_id, sk.nomor_sk, sk.judul_sk, sk.tanggal_terbit, sk.batas_aktif, sk.status_keaktifan,
                 o.nama_opd, o.opd_id,
                 (
                     SELECT COUNT(DISTINCT relawan_id) FROM (
@@ -62,7 +62,7 @@ export const getSKById = async (req: AuthRequest, res: Response): Promise<void> 
 
         const querySK = `
             SELECT 
-                sk.sk_id, sk.nomor_sk, sk.judul_sk, sk.tanggal_terbit, sk.batas_aktif, sk.status, sk.file_path,
+                sk.sk_id, sk.nomor_sk, sk.judul_sk, sk.tanggal_terbit, sk.batas_aktif, sk.status_keaktifan, sk.file_path,
                 o.nama_opd, o.opd_id
             FROM surat_keputusan sk
             JOIN opd o ON sk.opd_id = o.opd_id
@@ -152,9 +152,9 @@ export const getSKPdf = async (req: AuthRequest, res: Response): Promise<void> =
 export const getOPDList = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const query = `
-            SELECT opd_id, nama_opd, is_active
+            SELECT opd_id, nama_opd, status_keaktifan
             FROM opd
-            WHERE is_active = true
+            WHERE status_keaktifan = true
             ORDER BY nama_opd ASC;
         `;
         const result = await executeQueryWithContext(query, [], req.user);
@@ -211,7 +211,7 @@ export const createSK = async (req: AuthRequest, res: Response): Promise<void> =
         // VALIDASI 1: OPD harus ada
         // ============================================
         const checkOPD = await client.query(
-            'SELECT opd_id, nama_opd FROM opd WHERE opd_id = $1 AND is_active = true',
+            'SELECT opd_id, nama_opd FROM opd WHERE opd_id = $1 AND status_keaktifan = true',
             [opd_id]
         );
 
@@ -455,7 +455,7 @@ export const createSK = async (req: AuthRequest, res: Response): Promise<void> =
 // 6. Update Status SK
 export const updateSKStatus = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { status, is_active } = req.body;
+    const { status, status_keaktifan } = req.body;
 
     let normalizedStatus: 'Aktif' | 'Tidak Aktif' | null = null;
     if (typeof status === 'string') {
@@ -465,8 +465,8 @@ export const updateSKStatus = async (req: AuthRequest, res: Response): Promise<v
         } else if (trimmedStatus === 'nonaktif' || trimmedStatus === 'tidak aktif') {
             normalizedStatus = 'Tidak Aktif';
         }
-    } else if (typeof is_active === 'boolean') {
-        normalizedStatus = is_active ? 'Aktif' : 'Tidak Aktif';
+    } else if (typeof status_keaktifan === 'boolean') {
+        normalizedStatus = status_keaktifan ? 'Aktif' : 'Tidak Aktif';
     }
 
     if (!normalizedStatus) {
@@ -498,7 +498,7 @@ export const updateSKStatus = async (req: AuthRequest, res: Response): Promise<v
         }
         const query = `
             UPDATE surat_keputusan
-            SET status = $1, updated_at = CURRENT_TIMESTAMP
+            SET status_keaktifan = $1, updated_at = CURRENT_TIMESTAMP
             WHERE sk_id = $2
             RETURNING *;
         `;
@@ -613,9 +613,9 @@ export const getKaderListForSK = async (req: AuthRequest, res: Response): Promis
         }
 
         const result = await executeQueryWithContext(
-            `SELECT kader_id, nama_kader, opd_id, is_active
+            `SELECT kader_id, nama_kader, opd_id, status_keaktifan
              FROM kader
-             WHERE opd_id = $1 AND is_active IS NOT FALSE
+             WHERE opd_id = $1 AND status_keaktifan IS NOT FALSE
              ORDER BY nama_kader ASC`,
             [opdId],
             req.user

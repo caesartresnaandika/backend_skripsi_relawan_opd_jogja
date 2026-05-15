@@ -11,7 +11,7 @@ UNION ALL
     count(*)::text AS value
    FROM relawan r
      JOIN users u ON r.user_id = u.user_id
-  WHERE u.is_active = true AND u.role = 'relawan'::user_role
+  WHERE u.status_keaktifan = true AND u.role = 'relawan'::user_role
 UNION ALL
  SELECT 'total_relawan_aktif'::text AS metric,
     count(*)::text AS value
@@ -44,7 +44,7 @@ AS SELECT u.user_id,
      JOIN kader k ON pr.kader_id = k.kader_id
      JOIN opd o ON pr.opd_id = o.opd_id
      LEFT JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id
-  WHERE u.role = 'relawan'::user_role AND u.is_active = true;
+  WHERE u.role = 'relawan'::user_role AND u.status_keaktifan = true;
 
 -- public.vw_relawan_per_opd source
 CREATE OR REPLACE VIEW public.vw_relawan_per_opd
@@ -60,7 +60,7 @@ AS SELECT o.opd_id,
      LEFT JOIN penugasan_relawan pr ON o.opd_id = pr.opd_id
      LEFT JOIN relawan r ON pr.relawan_id = r.relawan_id
      LEFT JOIN users u ON r.user_id = u.user_id
-  WHERE u.is_active = true OR u.is_active IS NULL
+  WHERE u.status_keaktifan = true OR u.status_keaktifan IS NULL
   GROUP BY o.opd_id, o.nama_opd
   ORDER BY (count(pr.relawan_id)) DESC;
 
@@ -90,5 +90,5 @@ AS SELECT r.jenis_kelamin AS gender,
     count(*) AS jumlah
    FROM relawan r
      JOIN users u ON r.user_id = u.user_id
-  WHERE u.is_active = true
+  WHERE u.status_keaktifan = true
   GROUP BY r.jenis_kelamin;

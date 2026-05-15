@@ -20,7 +20,7 @@ export const getAllSaran = async (req: AuthRequest, res: Response): Promise<void
                 sm.saran_id,
                 sm.subjek,
                 sm.pesan,
-                sm.status,
+                sm.status_keaktifan,
                 sm.catatan_admin,
                 sm.created_at,
                 sm.updated_at,
@@ -35,7 +35,7 @@ export const getAllSaran = async (req: AuthRequest, res: Response): Promise<void
         let paramIndex = 1;
 
         if (statusFilter && ['Menunggu', 'Selesai'].includes(statusFilter)) {
-            baseQuery += ` AND sm.status = $${paramIndex}`;
+            baseQuery += ` AND sm.status_keaktifan = $${paramIndex}`;
             values.push(statusFilter);
             paramIndex++;
         }
@@ -96,9 +96,9 @@ export const createSaran = async (req: AuthRequest, res: Response): Promise<void
         }
 
         const query = `
-            INSERT INTO saran_masukan (user_id, subjek, pesan, status)
+            INSERT INTO saran_masukan (user_id, subjek, pesan, status_keaktifan)
             VALUES ($1, $2, $3, 'Menunggu')
-            RETURNING saran_id, subjek, pesan, status, created_at
+            RETURNING saran_id, subjek, pesan, status_keaktifan, created_at
         `;
         const result = await executeQueryWithContext(query, [userId, subjek || null, pesan], req.user);
 
@@ -122,24 +122,24 @@ export const createSaran = async (req: AuthRequest, res: Response): Promise<void
 export const updateStatusBaca = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { status, catatan_admin } = req.body;
+        const { status_keaktifan, catatan_admin } = req.body;
 
-        if (!status || !['Menunggu', 'Selesai'].includes(status)) {
-            res.status(400).json({ success: false, message: 'Field "status" wajib diisi dengan nilai "Menunggu" atau "Selesai"' });
+        if (!status_keaktifan || !['Menunggu', 'Selesai'].includes(status_keaktifan)) {
+            res.status(400).json({ success: false, message: 'Field "status_keaktifan" wajib diisi dengan nilai "Menunggu" atau "Selesai"' });
             return;
         }
 
         const query = `
             UPDATE saran_masukan
-            SET status = $1,
+            SET status_keaktifan = $1,
                 catatan_admin = $2,
                 updated_at = CURRENT_TIMESTAMP
             WHERE saran_id = $3
-            RETURNING saran_id, status, catatan_admin, updated_at
+            RETURNING saran_id, status_keaktifan, catatan_admin, updated_at
         `;
         const result = await executeQueryWithContext(
             query,
-            [status, catatan_admin || null, id],
+            [status_keaktifan, catatan_admin || null, id],
             req.user
         );
 
@@ -150,7 +150,7 @@ export const updateStatusBaca = async (req: AuthRequest, res: Response): Promise
 
         res.status(200).json({
             success: true,
-            message: `Saran berhasil ditandai sebagai "${status}"`,
+            message: `Saran berhasil ditandai sebagai "${status_keaktifan}"`,
             data: result.rows[0]
         });
 

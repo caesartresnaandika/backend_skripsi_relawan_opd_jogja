@@ -23,7 +23,7 @@ export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<vo
     try {
         const result = await executeQueryWithContext(`
             SELECT 
-                u.user_id, u.nik, u.nama_lengkap, u.no_hp, u.is_active,
+                u.user_id, u.nik, u.nama_lengkap, u.no_hp, u.status_keaktifan,
                 r.relawan_id, r.relawan_id AS id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
                 pr.penugasan_id, pr.penugasan, pr.jabatan, pr.detail_jabatan,
                 pr.status_keaktifan AS status_penugasan,
@@ -54,7 +54,7 @@ export const getRelawanById = async (req: AuthRequest, res: Response): Promise<v
     try {
         const result = await executeQueryWithContext(`
             SELECT 
-                u.user_id, u.nik, u.nama_lengkap, u.no_hp, u.foto_profil, u.is_active,
+                u.user_id, u.nik, u.nama_lengkap, u.no_hp, u.foto_profil, u.status_keaktifan,
                 r.relawan_id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
                 pr.penugasan_id, pr.penugasan, pr.jabatan, pr.detail_jabatan,
                 pr.status_keaktifan AS status_penugasan, pr.sk_id,
@@ -82,7 +82,7 @@ export const getRelawanById = async (req: AuthRequest, res: Response): Promise<v
             nama_lengkap: result.rows[0].nama_lengkap,
             no_hp: result.rows[0].no_hp,
             foto_profil: result.rows[0].foto_profil,
-            is_active: result.rows[0].is_active,
+            status_keaktifan: result.rows[0].status_keaktifan,
             relawan_id: result.rows[0].relawan_id,
             jenis_kelamin: result.rows[0].jenis_kelamin,
             alamat_ktp: result.rows[0].alamat_ktp,
@@ -122,7 +122,7 @@ export const getPengajuanPerubahanDaftar = async (req: AuthRequest, res: Respons
     try {
         const result = await executeQueryWithContext(`
             SELECT 
-                pp.pengajuan_id, pp.jenis_perubahan, pp.status, pp.tanggal_pengajuan,
+                pp.pengajuan_id, pp.jenis_perubahan, pp.status_pengajuan, pp.tanggal_pengajuan,
                 pp.catatan_relawan, pp.data_baru, pp.data_lama,
                 u.nama_lengkap, u.nik, r.relawan_id
             FROM pengajuan_perubahan_data pp
@@ -157,7 +157,7 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
         await setClientContext(client, req.user!);
 
         const pengajuanRes = await client.query(
-            `SELECT * FROM pengajuan_perubahan_data WHERE pengajuan_id = $1 AND status = 'Menunggu Review'`,
+            `SELECT * FROM pengajuan_perubahan_data WHERE pengajuan_id = $1 AND status_pengajuan = 'Menunggu Review'`,
             [id]
         );
         if (pengajuanRes.rows.length === 0) {
@@ -182,7 +182,7 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
 
         await client.query(`
             UPDATE pengajuan_perubahan_data 
-            SET status = $1, catatan_verifikator = $2,
+            SET status_pengajuan = $1, catatan_verifikator = $2,
                 tanggal_verifikasi = CURRENT_TIMESTAMP, verifikator_id = $3
             WHERE pengajuan_id = $4
         `, [statusDB, catatan_verifikator || null, req.user!.id, id]);
@@ -256,7 +256,7 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
 
         const hashedPassword = await bcrypt.hash(nik + (process.env.PASSWORD_PEPPER || ''), await bcrypt.genSalt(10));
         const userRes = await client.query(`
-            INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+            INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
             VALUES ($1,$2,$3,$4,'relawan',true) RETURNING user_id
         `, [nik, nama_lengkap, no_hp, hashedPassword]);
         const userId = userRes.rows[0].user_id;
@@ -406,7 +406,7 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
                     // ── NIK baru → INSERT user + relawan ───────────────────────
                     const hashedPassword = await bcrypt.hash(item.nik + (process.env.PASSWORD_PEPPER || ''), await bcrypt.genSalt(10));
                     const uRes = await client.query(`
-                        INSERT INTO users (nik, nama_lengkap, no_hp, password, role, is_active)
+                        INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
                         VALUES ($1,$2,$3,$4,'relawan',true) RETURNING user_id
                     `, [item.nik, item.namaLengkap, item.noHp, hashedPassword]);
                     userId = uRes.rows[0].user_id;
@@ -507,8 +507,8 @@ export const getkaderByOpd = async (req: AuthRequest, res: Response): Promise<vo
     const { opd_id } = req.query;
     try {
         const result = opd_id
-            ? await executeQueryWithContext(`SELECT kader_id, kader_id AS id, nama_kader, nama_kader AS nama, opd_id, is_active, sk_id FROM kader WHERE opd_id = $1 ORDER BY nama_kader`, [opd_id], req.user)
-            : await executeQueryWithContext(`SELECT kader_id, kader_id AS id, nama_kader, nama_kader AS nama, opd_id, is_active, sk_id FROM kader ORDER BY nama_kader`, [], req.user);
+            ? await executeQueryWithContext(`SELECT kader_id, kader_id AS id, nama_kader, nama_kader AS nama, opd_id, status_keaktifan, sk_id FROM kader WHERE opd_id = $1 ORDER BY nama_kader`, [opd_id], req.user)
+            : await executeQueryWithContext(`SELECT kader_id, kader_id AS id, nama_kader, nama_kader AS nama, opd_id, status_keaktifan, sk_id FROM kader ORDER BY nama_kader`, [], req.user);
         res.status(200).json({ success: true, data: result.rows });
     } catch (error: any) {
         console.error('Error in getkaderByOpd:', error);
