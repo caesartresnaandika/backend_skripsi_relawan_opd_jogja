@@ -279,7 +279,7 @@ export const createSK = async (req: AuthRequest, res: Response): Promise<void> =
         const insertSKQuery = `
                 INSERT INTO surat_keputusan (
                     nomor_sk, judul_sk, tanggal_terbit, batas_aktif, 
-                    opd_id, file_path, status
+                    opd_id, file_path, status_keaktifan
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                 RETURNING sk_id;
@@ -339,7 +339,7 @@ export const createSK = async (req: AuthRequest, res: Response): Promise<void> =
             picUpdated = r3.rowCount ?? 0;
 
             const r3_insert = await client.query(
-                `INSERT INTO pic_kader (relawan_id, kader_id, status, sk_id)
+                `INSERT INTO pic_kader (relawan_id, kader_id, status_keaktifan, sk_id)
                  SELECT DISTINCT ON (relawan_id, kader_id) relawan_id, kader_id, 'Aktif', $1
                  FROM pic_kader
                  WHERE kader_id IN (SELECT kader_id FROM kader WHERE opd_id = $2)
@@ -392,7 +392,7 @@ export const createSK = async (req: AuthRequest, res: Response): Promise<void> =
                 picUpdated = r3.rowCount ?? 0;
 
                 const r3_insert = await client.query(
-                    `INSERT INTO pic_kader (relawan_id, kader_id, status, sk_id)
+                    `INSERT INTO pic_kader (relawan_id, kader_id, status_keaktifan, sk_id)
                      SELECT DISTINCT ON (relawan_id, kader_id) relawan_id, kader_id, 'Aktif', $1
                      FROM pic_kader
                      WHERE kader_id = ANY($2::int[])

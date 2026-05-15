@@ -54,7 +54,7 @@ export const getSkByOpd = async (req: OpdAuthRequest, res: Response): Promise<vo
         const result = await executeQueryWithContext(`
             SELECT 
                 sk.sk_id, sk.nomor_sk, sk.judul_sk, sk.tanggal_terbit,
-                sk.batas_aktif, sk.status,
+                sk.batas_aktif, sk.status_keaktifan,
                 (SELECT COUNT(*) FROM penugasan_relawan pr WHERE pr.sk_id = sk.sk_id) AS jumlah_relawan
             FROM surat_keputusan sk
             WHERE sk.opd_id = $1
@@ -493,7 +493,7 @@ export const reviewPengajuanByOpd = async (req: OpdAuthRequest, res: Response): 
         const pengajuanRes = await client.query(`
             SELECT pp.* FROM pengajuan_perubahan_data pp
             WHERE pp.pengajuan_id = $1 
-              AND pp.status_pengajuan_pengajuan = 'Menunggu Review'
+              AND pp.status_pengajuan = 'Menunggu Review'
               AND EXISTS (
                   SELECT 1 FROM penugasan_relawan pr 
                   WHERE pr.relawan_id = pp.relawan_id AND pr.opd_id = $2
