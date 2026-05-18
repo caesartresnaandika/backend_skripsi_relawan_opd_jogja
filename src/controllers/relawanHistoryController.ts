@@ -29,7 +29,7 @@ export const getMyHistory = async (req: RelawanAuthRequest, res: Response): Prom
             // 2. History Status Pengajuan Perubahan Biodata
             executeQueryWithContext(`
                 SELECT 
-                    pengajuan_id, jenis_perubahan, status, 
+                    pengajuan_id, jenis_perubahan, status_pengajuan, 
                     catatan_relawan, catatan_verifikator,
                     tanggal_pengajuan, tanggal_verifikasi
                 FROM pengajuan_perubahan_data
