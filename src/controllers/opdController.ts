@@ -130,7 +130,7 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
 
         // 3. Ikat di pengelola_opd (dengan kolom baru)
         await executeQueryWithContext(
-            `INSERT INTO pengelola_opd (user_id, opd_id, jabatan, tanggal_mulai, status)
+            `INSERT INTO pengelola_opd (user_id, opd_id, jabatan, tanggal_mulai, status_keaktifan)
              VALUES ($1, $2, 'Pengelola OPD', CURRENT_DATE, 'Aktif')`,
             [userId, opdId], req.user
         );
@@ -233,7 +233,7 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
 
                 // Ikat di pengelola_opd (dengan kolom baru)
                 await client.query(
-                    `INSERT INTO pengelola_opd (user_id, opd_id, jabatan, tanggal_mulai, status)
+                    `INSERT INTO pengelola_opd (user_id, opd_id, jabatan, tanggal_mulai, status_keaktifan)
                      VALUES ($1, $2, 'Pengelola OPD', CURRENT_DATE, 'Aktif')`,
                     [userId, opdId]
                 );

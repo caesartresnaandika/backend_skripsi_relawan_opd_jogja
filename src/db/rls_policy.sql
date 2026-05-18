@@ -152,3 +152,155 @@ LEFT JOIN public.relawan r ON u.user_id = r.user_id
 WHERE u.role = 'relawan' 
   AND r.relawan_id IS NULL;
 
+-- RLS TERBARU DARI SETIAP TABLE YANG DI AMBIL DARI SUPABASE DENGAN FORMAT JSON
+-- dengan QUERY SEPERTI INI :
+-- SELECT *
+-- FROM pg_policies
+-- WHERE tablename = 'nama_tabel';
+
+-- Table users, surat_keputusan, pengelola_opd, pic_kader, saran_masukan, hotline_settings, dan audit_logs saat aku jalankan querynya, tidak ada rls policy
+
+[
+  {
+    "schemaname": "public",
+    "tablename": "penugasan_relawan",
+    "policyname": "self_access_penugasan",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(relawan_id IN ( SELECT relawan.relawan_id\n   FROM relawan\n  WHERE (relawan.user_id = (current_setting('app.current_user_id'::text, true))::integer)))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "penugasan_relawan",
+    "policyname": "super_admin_all_penugasan",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(current_setting('app.current_user_role'::text, true) = 'super_admin'::text)",
+    "with_check": null
+  }
+]
+
+[
+  {
+    "schemaname": "public",
+    "tablename": "relawan",
+    "policyname": "relawan_self_select",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "relawan",
+    "policyname": "self_access_relawan",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(user_id = (current_setting('app.current_user_id'::text, true))::integer)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "relawan",
+    "policyname": "super_admin_all_relawan",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(current_setting('app.current_user_role'::text, true) = 'super_admin'::text)",
+    "with_check": null
+  }
+]
+
+[
+  {
+    "schemaname": "public",
+    "tablename": "opd",
+    "policyname": "opd_relawan_select_opd",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(current_setting('app.current_user_role'::text, true) = ANY (ARRAY['opd'::text, 'relawan'::text]))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "opd",
+    "policyname": "super_admin_all_opd",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(current_setting('app.current_user_role'::text, true) = 'super_admin'::text)",
+    "with_check": null
+  }
+]
+
+[
+  {
+    "schemaname": "public",
+    "tablename": "kader",
+    "policyname": "opd_access_kader",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "((current_setting('app.current_user_role'::text, true) = 'opd'::text) AND (opd_id = (current_setting('app.current_opd_id'::text, true))::integer))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "kader",
+    "policyname": "relawan_access_kader",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((current_setting('app.current_user_role'::text, true) = 'relawan'::text) AND (opd_id IN ( SELECT pr.opd_id\n   FROM (penugasan_relawan pr\n     JOIN relawan r ON ((pr.relawan_id = r.relawan_id)))\n  WHERE (r.user_id = (current_setting('app.current_user_id'::text, true))::integer))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "kader",
+    "policyname": "super_admin_all_kader",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(current_setting('app.current_user_role'::text, true) = 'super_admin'::text)",
+    "with_check": null
+  }
+]
+
+[
+  {
+    "schemaname": "public",
+    "tablename": "pengajuan_perubahan_data",
+    "policyname": "opd_all_pengajuan",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(current_setting('app.current_user_role'::text, true) = 'opd'::text)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pengajuan_perubahan_data",
+    "policyname": "relawan_own_pengajuan",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(relawan_id IN ( SELECT relawan.relawan_id\n   FROM relawan\n  WHERE (relawan.user_id = (current_setting('app.current_user_id'::text, true))::integer)))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pengajuan_perubahan_data",
+    "policyname": "super_admin_all_pengajuan",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(current_setting('app.current_user_role'::text, true) = 'super_admin'::text)",
+    "with_check": null
+  }
+]

@@ -4,10 +4,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Mengambil settingan dari file .env kamu tadi
+// Mengambil settingan dari file .env
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    // Fallback if DATABASE_URL is not provided:
     user: process.env.DB_USER,
     host: process.env.DB_HOST,
     database: process.env.DB_NAME,
@@ -34,7 +33,7 @@ export const executeQueryWithContext = async (
             // Tambah baris ini untuk mendukung policy opd_access_kader:
             const opdId = (userContext as any).opd_id;
             await client.query("SELECT set_config('app.current_opd_id', $1, true);", [(opdId ?? 0).toString()]);
-            
+
             if (userContext.ip) {
                 await client.query("SELECT set_config('app.current_user_ip', $1, true);", [userContext.ip]);
             }
