@@ -55,9 +55,9 @@ export const requestProfileUpdate = async (req: RelawanAuthRequest, res: Respons
         // Insert ke tabel pengajuan (sebelum di approve admin)
         const insertRes = await executeQueryWithContext(`
             INSERT INTO pengajuan_perubahan_data 
-            (relawan_id, jenis_perubahan, data_lama, data_baru, catatan_relawan, status)
+            (relawan_id, jenis_perubahan, data_lama, data_baru, catatan_relawan, status_pengajuan)
             VALUES ($1, 'Biodata Diri', $2, $3, $4, 'Menunggu Review')
-            RETURNING pengajuan_id, status, tanggal_pengajuan
+            RETURNING pengajuan_id, status_pengajuan, tanggal_pengajuan
         `, [relawanId, JSON.stringify(dataLama), JSON.stringify(data_baru), catatan], req.user);
 
         res.status(201).json({
