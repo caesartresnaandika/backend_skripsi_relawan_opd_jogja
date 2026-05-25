@@ -27,9 +27,6 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Jika frontend lupa menaruh '/api' di URL (misal: /auth/
-// login), 
-// middleware ini akan otomatis mengarahkannya ke /api/auth/login
 app.use((req, res, next) => {
     if (!req.url.startsWith('/api') && req.url !== '/') {
         req.url = '/api' + req.url;
@@ -37,7 +34,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// === DAFTAR ROUTES (API MAP) ===
+// DAFTAR ROUTES (API MAP)
 app.use('/api/auth', authRoutes);
 app.use('/api/relawan', relawanRoutes);
 app.use('/api/opd', opdRoutes);
@@ -55,10 +52,10 @@ app.use('/api/settings', settingsRoutes);
 
 // Test Root
 app.get('/', (req: Request, res: Response) => {
-    res.send('Server Backend Skripsi (TypeScript) Berjalan! 🚀');
+    res.send('Server Backend Berjalan');
 });
 
-// Jalankan Server (Hanya untuk lokal)
+// Jalankan Server (lokal)
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {
         console.log(`Server berjalan di http://localhost:${PORT}`);
