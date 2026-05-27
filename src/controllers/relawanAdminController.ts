@@ -484,7 +484,10 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
         if (insertedCount > 0)       parts.push(`${insertedCount} data baru ditambahkan.`);
         if (updatedProfileCount > 0) parts.push(`${updatedProfileCount} profil diperbarui.`);
         if (updatedCount > 0)        parts.push(`${updatedCount} penugasan diperbarui.`);
-        if (errors.length > 0)       parts.push(`${errors.length} peringatan.`);
+        if (errors.length > 0) {
+            const examples = errors.slice(0, 2).join(' | ');
+            parts.push(`${errors.length} peringatan. Contoh: ${examples}${errors.length > 2 ? ' | ...' : ''}`);
+        }
 
         const totalSuccess = insertedCount + updatedProfileCount + updatedCount;
         res.status(totalSuccess > 0 ? 201 : 400).json({
