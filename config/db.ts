@@ -23,14 +23,19 @@ dotenv.config();
  * Koneksi diambil dari pool saat dibutuhkan dan dikembalikan setelah selesai.
  * Konfigurasi diambil dari environment variable (file .env).
  */
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    user: process.env.DB_USER,
-    host: process.env.DB_HOST,
-    database: process.env.DB_NAME,
-    password: process.env.DB_PASSWORD,
-    port: Number(process.env.DB_PORT) || 5432,
-});
+const poolConfig: any = {};
+
+if (process.env.DATABASE_URL) {
+    poolConfig.connectionString = process.env.DATABASE_URL;
+} else {
+    poolConfig.user = process.env.DB_USER;
+    poolConfig.host = process.env.DB_HOST;
+    poolConfig.database = process.env.DB_NAME;
+    poolConfig.password = process.env.DB_PASSWORD;
+    poolConfig.port = Number(process.env.DB_PORT) || 5432;
+}
+
+const pool = new Pool(poolConfig);
 
 /**
  * [HELPER RLS]
