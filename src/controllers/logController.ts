@@ -1,7 +1,32 @@
+/*
+ * ============================================================
+ * LOG CONTROLLER — AUDIT LOG VIEWER
+ * ============================================================
+ * Menampilkan log aktivitas (audit trail) untuk Super Admin.
+ * Log dicatat oleh trigger database PostgreSQL setiap kali
+ * ada perubahan data di tabel-tabel penting.
+ *
+ * Fitur:
+ * - Pagination (page & limit)
+ * - Filter by action_type (INSERT, UPDATE, DELETE)
+ * - Filter by date range (start_date, end_date)
+ * - Filter by user_id
+ * - Sorting: terbaru ke terlama
+ *
+ * Query dibangun secara dinamis menggunakan parameter binding
+ * untuk mencegah SQL injection.
+ * ============================================================
+ */
+
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 
+/*
+ * GET AUDIT LOGS
+ * Mengambil log aktivitas dengan filter dan pagination.
+ * Query dibangun dinamis: filter ditambahkan hanya jika parameter ada.
+ */
 export const getAuditLogs = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         // 1. Ambil Parameter dari Query String (dengan nilai default)

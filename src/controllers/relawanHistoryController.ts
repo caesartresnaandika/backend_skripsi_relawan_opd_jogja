@@ -1,8 +1,25 @@
-//relawanHistoryController
+/*
+ * ============================================================
+ * RELAWAN HISTORY CONTROLLER
+ * ============================================================
+ * Menampilkan riwayat aktivitas relawan yang sedang login.
+ * Data terdiri dari 2 jenis:
+ * 1. Riwayat penugasan (semua status)
+ * 2. Riwayat pengajuan perubahan biodata
+ *
+ * Kedua query dijalankan paralel untuk performa.
+ * ============================================================
+ */
+
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { RelawanAuthRequest } from '../middleware/relawanMiddleware';
 
+/*
+ * GET MY HISTORY
+ * Mengambil riwayat penugasan dan pengajuan perubahan data
+ * secara paralel.
+ */
 export const getMyHistory = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
     try {
         const relawanId = req.relawan_id;

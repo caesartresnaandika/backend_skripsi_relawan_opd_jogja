@@ -1,0 +1,515 @@
+{
+  "info": {
+    "_postman_id": "184aa239-8ba7-4b7b-bfa7-6cd7e1743e2c",
+    "name": "Relawan - Relawan Bappeda",
+    "description": "Koleksi Postman untuk pengujian fitur-fitur Role Relawan.\nData test menggunakan relawan Budi Santoso (NIK: 3471080508040001).\nDefault password = NIK relawan.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "48588638",
+    "_collection_link": "https://go.postman.co/collection/48588638-184aa239-8ba7-4b7b-bfa7-6cd7e1743e2c?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "1. Login Relawan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response has token\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('token');",
+              "});",
+              "",
+              "// Auto-save token ke environment variable",
+              "var jsonData = pm.response.json();",
+              "if (jsonData.token) {",
+              "    pm.environment.set(\"jwt_token\", jsonData.token);",
+              "    console.log(\"Token relawan berhasil disimpan!\");",
+              "}"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nik\": \"3471000000000001\",\n  \"password\": \"3471000000000001\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/auth/login",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "2. Lihat Profil Relawan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response has profile data\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData.data).to.have.property('nik');",
+              "    pm.expect(jsonData.data).to.have.property('nama_lengkap');",
+              "    pm.expect(jsonData.data).to.have.property('alamat_ktp');",
+              "    pm.expect(jsonData.data).to.have.property('kelurahan');",
+              "    pm.expect(jsonData.data).to.have.property('jenis_kelamin');",
+              "    pm.expect(jsonData.data).to.have.property('no_hp');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{url}}/api/relawan/profile",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "relawan",
+            "profile"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "3. Lihat Penugasan / Komunitas",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response has penugasan array\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData.data).to.be.an('array');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{url}}/api/relawan/penugasan",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "relawan",
+            "penugasan"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "4. Kirim Saran",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "    pm.expect(pm.response.code).to.equal(201);",
+              "});",
+              "",
+              "pm.test(\"Saran berhasil dikirim\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData.data).to.have.property('saran_id');",
+              "    pm.expect(jsonData.data.status_keaktifan).to.equal('Menunggu');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"subjek\": \"Saran Perbaikan Sistem\",\n    \"pesan\": \"Mohon ditambahkan fitur notifikasi ketika ada perubahan jadwal penugasan. Terima kasih.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/saran",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "saran"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "5. Pengajuan Pembaharuan Data (Alamat Baru)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "    pm.expect(pm.response.code).to.equal(201);",
+              "});",
+              "",
+              "pm.test(\"Pengajuan berhasil dikirim\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData.data).to.have.property('pengajuan_id');",
+              "    pm.expect(jsonData.data.status_pengajuan).to.equal('Menunggu Review');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"data_baru\": {\n        \"alamat_ktp\": \"Jl. Kenanga 12, RT 05/RW 03\",\n        \"kelurahan\": \"Prawirodirjan\"\n    },\n    \"catatan\": \"Mohon diperbarui karena saya sudah pindah domisili ke alamat baru.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/relawan/profile/update",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "relawan",
+            "profile",
+            "update"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "6. Lihat Riwayat Pengajuan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response has history data\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData.data).to.have.property('riwayat_penugasan');",
+              "    pm.expect(jsonData.data).to.have.property('riwayat_pengajuan');",
+              "    pm.expect(jsonData.data.riwayat_penugasan).to.be.an('array');",
+              "    pm.expect(jsonData.data.riwayat_pengajuan).to.be.an('array');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{url}}/api/relawan/history",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "relawan",
+            "history"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "7a. Verifikasi Password Lama",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Password match check returned\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData).to.have.property('match');",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"password\": \"3471000000000001\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/relawan/verify-password",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "relawan",
+            "verify-password"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "7b. Ubah Kata Sandi",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Password berhasil diubah\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData.message).to.equal('Password berhasil diubah.');",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"old_password\": \"3471000000000001\",\n    \"new_password\": \"RelawanBudiman2026\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/relawan/change-password",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "relawan",
+            "change-password"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "8. Logout",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Logout dilakukan client-side dengan menghapus token",
+              "// Pada Postman, kita hapus variable jwt_token dari environment",
+              "pm.environment.unset(\"jwt_token\");",
+              "console.log(\"Token berhasil dihapus. Relawan telah logout.\");"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Token sudah dihapus dari environment\", function () {",
+              "    var token = pm.environment.get(\"jwt_token\");",
+              "    pm.expect(token).to.be.undefined;",
+              "});",
+              "",
+              "pm.test(\"Request tanpa token ditolak (401)\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([401, 403]);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{url}}/api/relawan/profile",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "relawan",
+            "profile"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "requests": {},
+        "exec": [
+          "pm.test(\"Status code is 200 or 201\", function () {",
+          "    // Mengecek apakah status code ada di dalam array [200, 201]",
+          "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+          "});",
+          "",
+          "// Auto-save token dari response login",
+          "var jsonData = pm.response.json();",
+          "",
+          "if (jsonData.token) {",
+          "    pm.environment.set(\"jwt_token\", jsonData.token);",
+          "    console.log(\"Token berhasil disimpan!\");",
+          "} else if (jsonData.data && jsonData.data.token) {",
+          "    pm.environment.set(\"jwt_token\", jsonData.data.token);",
+          "    console.log(\"Token berhasil disimpan!\");",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "url",
+      "value": "http://localhost:3000"
+    }
+  ]
+}

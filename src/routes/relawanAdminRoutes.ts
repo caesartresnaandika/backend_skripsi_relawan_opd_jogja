@@ -1,4 +1,11 @@
-//RelawanAdminRoutes.ts
+/*
+ * RELAWAN ADMIN ROUTES — Manajemen relawan (Super Admin only)
+ * Base URL: /api/admin/relawan
+ * Semua endpoint dilindungi verifyToken + authorizeRole('super_admin')
+ *
+ * ⚠️ URUTAN PENTING: Route /pengajuan harus SEBELUM /:id
+ * agar Express tidak salah mengartikan 'pengajuan' sebagai parameter ID.
+ */
 import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 import { 
@@ -15,33 +22,36 @@ import {
 
 const router = Router();
 
-// Semua rute ini wajib dilindungi dari akses non Super Admin
+// Semua route dilindungi — hanya Super Admin yang bisa akses
 router.use(verifyToken, authorizeRole('super_admin'));
 
-// URL: GET http://localhost:3000/api/admin/relawan
+// GET  /api/admin/relawan — Daftar semua relawan
 router.get('/', getAllRelawan);
 
-// URL: POST http://localhost:3000/api/admin/relawan
+// POST /api/admin/relawan — Tambah relawan manual
 router.post('/', createRelawan);
 
-// URL: POST http://localhost:3000/api/admin/relawan/bulk
+// POST /api/admin/relawan/bulk — Import relawan dari Excel
 router.post('/bulk', createBulkRelawan);
 
-// URL: GET http://localhost:3000/api/admin/relawan/kader?opd_id=1
+// GET  /api/admin/relawan/kader?opd_id= — Daftar kader untuk dropdown
 router.get('/kader', getkaderByOpd);
 
-// URL: GET http://localhost:3000/api/admin/relawan/pengajuan
-// TARUH PENGAJUAN DI ATAS /:id AGAR TIDAK BENTROK DENGAN BACA PARAMETER ID
+// GET  /api/admin/relawan/pengajuan — Antrian pengajuan perubahan data
+// ⚠️ HARUS DI ATAS /:id agar tidak bentrok!
 router.get('/pengajuan', getPengajuanPerubahanDaftar);
 
-// URL: POST http://localhost:3000/api/admin/relawan/pengajuan/:id/review
-// HARUS DI ATAS /:id AGAR TIDAK BENTROK!
+// POST /api/admin/relawan/pengajuan/:id/review — Setujui/tolak pengajuan
+// ⚠️ HARUS DI ATAS /:id agar tidak bentrok!
 router.post('/pengajuan/:id/review', reviewPengajuan);
 
+// DELETE /api/admin/relawan/penugasan/:penugasan_id — Hapus penugasan
 router.delete('/penugasan/:penugasan_id', deletePenugasan);
+
+// PUT /api/admin/relawan/:relawan_id — Update data relawan
 router.put('/:relawan_id', updateRelawan);
 
-// URL: GET http://localhost:3000/api/admin/relawan/:id
+// GET /api/admin/relawan/:id — Detail relawan
 router.get('/:id', getRelawanById);
 
 export default router;

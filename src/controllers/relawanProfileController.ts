@@ -1,10 +1,33 @@
-//relawanProfileController
+/*
+ * ============================================================
+ * RELAWAN PROFILE CONTROLLER
+ * ============================================================
+ * Controller khusus untuk role relawan yang menangani:
+ * 1. Melihat biodata lengkap (data dari tabel relawan + users)
+ * 2. Mengajukan perubahan biodata (masuk antrean review admin)
+ * 3. Melihat daftar penugasan
+ * 4. Verifikasi password lama (real-time dari frontend)
+ * 5. Ganti password
+ *
+ * Berbeda dengan profileController biasa, controller ini
+ * menggunakan `req.relawan_id` yang sudah di-set oleh
+ * middleware requireRelawanContext.
+ * ============================================================
+ */
+
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { RelawanAuthRequest } from '../middleware/relawanMiddleware';
 import bcrypt from 'bcrypt';
 
-// 1. Get Detail Lengkap Biodata
+/*
+ * ============================================
+ * 1. GET BIODATA LENGKAP RELAWAN
+ * ============================================
+ * Mengambil data dari tabel relawan + users.
+ * Data sensitif seperti password tidak dikirim.
+ * ============================================
+ */
 export const getMyProfile = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
     try {
         const result = await executeQueryWithContext(`
@@ -31,7 +54,23 @@ export const getMyProfile = async (req: RelawanAuthRequest, res: Response): Prom
     }
 };
 
-// 2. Request Perubahan Biodata (Tidak update langsung, masuk antrean Review)
+/*
+ * ============================================
+ * 2. REQUEST PERUBAHAN BIODATA
+ * ============================================
+ * Tidak langsung mengubah data di database!
+ * Perubahan biodata masuk ke tabel pengajuan_perubahan_data
+ * dan harus direview oleh admin/OPD terlebih dahulu.
+ *
+ * Alur:
+ * 1. Ambil data lama dari database
+ * 2. Simpan data lama + data baru ke tabel pengajuan
+ * 3. Status awal: 'Menunggu Review'
+ * 4. Admin/OPD akan me-review dan menyetujui/menolak
+ *
+ * Keuntungan: Admin bisa memeriksa perubahan sebelum diterapkan.
+ * ============================================
+ */
 export const requestProfileUpdate = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
     try {
         const relawanId = req.relawan_id;
@@ -52,7 +91,7 @@ export const requestProfileUpdate = async (req: RelawanAuthRequest, res: Respons
 
         const dataLama = oldDataRes.rows[0];
 
-        // Insert ke tabel pengajuan (sebelum di approve admin)
+        // Insert ke tabel pengajuan (belum di-apply, masih waiting review)
         const insertRes = await executeQueryWithContext(`
             INSERT INTO pengajuan_perubahan_data 
             (relawan_id, jenis_perubahan, data_lama, data_baru, catatan_relawan, status_pengajuan)
@@ -72,6 +111,14 @@ export const requestProfileUpdate = async (req: RelawanAuthRequest, res: Respons
     }
 };
 
+/*
+ * ============================================
+ * 3. GET DAFTAR PENUGASAN RELAWAN
+ * ============================================
+ * Mengambil semua penugasan yang dimiliki relawan ini,
+ * termasuk informasi OPD, kader, dan nomor SK.
+ * ============================================
+ */
 export const getMyPenugasan = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
     try {
         const result = await executeQueryWithContext(`
@@ -95,7 +142,17 @@ export const getMyPenugasan = async (req: RelawanAuthRequest, res: Response): Pr
     }
 };
 
-// 4. Verifikasi Password Lama (untuk validasi real-time di frontend)
+/*
+ * ============================================
+ * 4. VERIFIKASI PASSWORD LAMA (REAL-TIME)
+ * ============================================
+ * Endpoint untuk validasi real-time dari frontend.
+ * Digunakan untuk memverifikasi password lama sebelum
+ * user mengganti password (tanpa mengubah apapun).
+ *
+ * Return: { success: true, match: true/false }
+ * ============================================
+ */
 export const verifyCurrentPassword = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
     const { password } = req.body;
     const userId = req.user?.id;
@@ -124,7 +181,20 @@ export const verifyCurrentPassword = async (req: RelawanAuthRequest, res: Respon
     }
 };
 
-// 5. Ubah Password Relawan
+/*
+ * ============================================
+ * 5. GANTI PASSWORD RELAWAN
+ * ============================================
+ * Alur:
+ * 1. Ambil password saat ini dari DB
+ * 2. Verifikasi password lama
+ * 3. Cegah password baru sama dengan password lama
+ * 4. Hash password baru dengan bcrypt + pepper
+ * 5. Simpan password baru
+ *
+ * Validasi tambahan: minimal 8 karakter + minimal 1 angka.
+ * ============================================
+ */
 export const changePassword = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
     const { old_password, new_password } = req.body;
     const userId = req.user?.id;

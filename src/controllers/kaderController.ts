@@ -1,11 +1,46 @@
-//kaderController
+/*
+ * ============================================================
+ * KADER CONTROLLER
+ * ============================================================
+ * Controller utama untuk manajemen Kader. Kader adalah unit
+ * komunitas/kelompok di bawah OPD yang menaungi para relawan.
+ *
+ * Controller ini memiliki dua kelompok fungsi:
+ * 1. SUPER ADMIN (/api/kader) — akses global ke semua kader
+ * 2. OPD ADMIN (/api/opd-admin/kader) — akses terbatas ke kader OPD-nya saja
+ *
+ * Fitur utama:
+ * - CRUD kader (Create, Read, Update, Delete)
+ * - Bulk import via Excel
+ * - Toggle status kader (aktif/nonaktif)
+ * - Assignment PIC (Person In Charge) untuk setiap kader
+ * - History pergantian PIC
+ *
+ * Setiap kader memiliki:
+ * - opd_id → OPD induk
+ * - pic_kader → relawan yang ditunjuk sebagai PIC
+ * - penugasan_relawan → anggota relawan di bawah kader ini
+ * ============================================================
+ */
+
 import pool from '../../config/db';
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { OpdAuthRequest } from '../middleware/opdMiddleware';
 
-// ── RLS context helpers ──────────────────────────────────────────────────────
+/*
+ * === RLS CONTEXT HELPERS ===
+ * Fungsi pembantu untuk mengatur konteks user di session PostgreSQL
+ * sebelum menjalankan query dalam transaksi manual (BEGIN/COMMIT).
+ *
+ * Dua helper:
+ * - setClientContextAdmin: untuk akses super_admin (global)
+ * - setClientContextOpd: untuk akses OPD (terbatas ke OPD tertentu)
+ *
+ * Parameter user.id di sini adalah id dari token JWT (req.user.id),
+ * BUKAN user_id dari tabel users (mereka sama nilainya).
+ */
 const setClientContextAdmin = async (client: any, user: NonNullable<AuthRequest['user']>) => {
     await client.query("SELECT set_config('app.current_user_id', $1, true)", [user.id.toString()]);
     await client.query("SELECT set_config('app.current_user_role', $1, true)", [user.role]);
@@ -19,9 +54,19 @@ const setClientContextOpd = async (client: any, user: NonNullable<OpdAuthRequest
 };
 
 // ============================================================
-// SUPER ADMIN — dipakai via /api/kader (kaderRoutes.ts)
+// BAGIAN 1: SUPER ADMIN — /api/kader
+// Akses global ke semua kader di seluruh OPD
 // ============================================================
 
+/*
+ * GET ALL KADER (Super Admin)
+ * Mengambil daftar semua kader dengan LEFT JOIN ke:
+ * - opd (nama OPD)
+ * - pic_kader aktif (PIC yang sedang bertugas)
+ * - relawan + users (data PIC: nama, NIK, no HP)
+ *
+ * Filter opsional: ?opd_id=XX untuk kader dari OPD tertentu
+ */
 export const getAllKader = async (req: AuthRequest, res: Response): Promise<void> => {
     const { opd_id } = req.query;
     try {
@@ -73,6 +118,10 @@ export const getAllKader = async (req: AuthRequest, res: Response): Promise<void
     }
 };
 
+/*
+ * GET KADER BY ID (Super Admin)
+ * Mengambil detail satu kader berdasarkan ID.
+ */
 export const getKaderById = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     try {
@@ -104,6 +153,23 @@ export const getKaderById = async (req: AuthRequest, res: Response): Promise<voi
     }
 };
 
+/*
+ * CREATE KADER (Super Admin)
+ * Membuat kader baru beserta PIC-nya dalam satu transaksi.
+ *
+ * Alur:
+ * 1. Validasi input (nama_kader, NIK PIC, dll)
+ * 2. Cari atau buat user + relawan dari NIK PIC
+ * 3. Insert kader baru
+ * 4. Insert ke pic_kader (hubungkan relawan sebagai PIC kader ini)
+ *
+ * Strategi NIK PIC:
+ * - Jika NIK sudah ada di users → pakai user yang ada
+ * - Jika belum → buat user baru + relawan baru (password default = NIK)
+ * - Jika user sudah ada tapi belum jadi relawan → buat profil relawan
+ *
+ * Semua dalam 1 transaksi (BEGIN/COMMIT/ROLLBACK) untuk atomicity.
+ */
 export const createKader = async (req: AuthRequest, res: Response): Promise<void> => {
     const { opd_id, nama_kader, deskripsi, nik_pic, nama_pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
 
@@ -227,6 +293,10 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
     }
 };
 
+/*
+ * UPDATE KADER (Super Admin)
+ * Memperbarui nama dan deskripsi kader.
+ */
 export const updateKader = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     const { nama_kader, deskripsi } = req.body;
@@ -263,6 +333,11 @@ export const updateKader = async (req: AuthRequest, res: Response): Promise<void
     }
 };
 
+/*
+ * DELETE KADER (Super Admin)
+ * Menghapus kader. Gagal jika masih ada relawan aktif
+ * (error code 23503 = foreign key violation).
+ */
 export const deleteKader = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     try {
@@ -274,6 +349,7 @@ export const deleteKader = async (req: AuthRequest, res: Response): Promise<void
         res.status(200).json({ success: true, message: 'Berhasil menghapus kader' });
     } catch (error: any) {
         console.error('Error in deleteKader:', error.message);
+        // Error 23503 = foreign key violation (masih ada relawan terikat)
         if (error.code === '23503') {
             res.status(400).json({ success: false, message: 'Kader tidak dapat dihapus karena masih memiliki relawan aktif' });
             return;
@@ -282,6 +358,18 @@ export const deleteKader = async (req: AuthRequest, res: Response): Promise<void
     }
 };
 
+/*
+ * TOGGLE STATUS KADER (Super Admin)
+ * Mengaktifkan atau menonaktifkan kader.
+ *
+ * Saat MENONAKTIFKAN:
+ * - Semua penugasan relawan di bawah kader ini otomatis dinonaktifkan
+ * - Relawan tetap ada, hanya status penugasannya yang berubah
+ *
+ * Saat MENGAKTIFKAN:
+ * - Hanya status kader yang berubah
+ * - Penugasan relawan tidak otomatis aktif kembali (perlu manual)
+ */
 export const toggleKaderStatus = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     const { status_keaktifan } = req.body;
@@ -292,9 +380,8 @@ export const toggleKaderStatus = async (req: AuthRequest, res: Response): Promis
     }
 
     try {
-        // ── Validasi hanya saat MENONAKTIFKAN ──
+        // Jika menonaktifkan, nonaktifkan juga semua penugasan relawan di bawah kader ini
         if (!status_keaktifan) {
-            // Otomatis menonaktifkan semua penugasan relawan di bawah kader ini
             await executeQueryWithContext(`
                 UPDATE penugasan_relawan 
                 SET status_keaktifan = 'Tidak Aktif', updated_at = CURRENT_TIMESTAMP
@@ -302,7 +389,7 @@ export const toggleKaderStatus = async (req: AuthRequest, res: Response): Promis
             `, [id], req.user);
         }
 
-        // ── Update status ──
+        // Update status kader
         const result = await executeQueryWithContext(`
             UPDATE kader SET status_keaktifan = $1, updated_at = CURRENT_TIMESTAMP
             WHERE kader_id = $2
@@ -326,6 +413,25 @@ export const toggleKaderStatus = async (req: AuthRequest, res: Response): Promis
     }
 };
 
+/*
+ * CREATE BULK KADER (Super Admin) — Import Excel
+ * Menambahkan banyak kader sekaligus dari data array.
+ * Setiap baris diproses dalam transaksi terpisah.
+ *
+ * Strategi Fuzzy Key Normalization:
+ * - Key dari Excel bisa berbeda-beda (spasi, case, underscore)
+ * - Misal: "Nama Kader", "nama_kader", "NAMA KADER" → semua dipetakan
+ * - Fungsi getVal() mencoba beberapa kemungkinan nama key
+ *
+ * Alur per baris:
+ * 1. Normalisasi key (hapus spasi, lowercase)
+ * 2. Validasi (nama kader, NIK PIC 16 digit, OPD)
+ * 3. Cari OPD berdasarkan nama
+ * 4. Cari/buat relawan dari NIK PIC
+ * 5. Insert kader
+ * 6. Insert pic_kader
+ * 7. Jika gagal → ROLLBACK baris itu saja (baris lain tetap diproses)
+ */
 export const createBulkKader = async (req: AuthRequest, res: Response): Promise<void> => {
     const data = req.body;
 
@@ -346,13 +452,14 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
             const rawItem = data[i];
             const rowNumber = i + 1;
 
-            // ── 1. Fuzzy Key Normalization (Menangani spasi & Case Insensitive) ──
+            // Fuzzy Key Normalization — membersihkan key dari spasi, case, dan karakter khusus
             const item: Record<string, any> = {};
             for (const key of Object.keys(rawItem)) {
                 const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
                 item[cleanKey] = rawItem[key];
             }
 
+            // Helper untuk mencoba beberapa kemungkinan nama key
             const getVal = (possibleKeys: string[]) => {
                 for (const key of possibleKeys) {
                     if (item[key] !== undefined) return String(item[key]);
@@ -479,9 +586,17 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
 };
 
 // ============================================================
-// OPD ADMIN — dipakai via /api/opd-admin/kader (opdAdminRoutes.ts)
+// BAGIAN 2: OPD ADMIN — /api/opd-admin/kader
+// Akses terbatas ke kader di OPD-nya sendiri (scoped by req.opd_id)
 // ============================================================
 
+/*
+ * GET KADER BY OPD
+ * Mengambil daftar kader milik OPD yang sedang login.
+ * Berbeda dengan getAllKader, fungsi ini otomatis memfilter
+ * berdasarkan opd_id dari middleware requireOpdContext.
+ * Plus: menampilkan jumlah anggota (COUNT relawan) per kader.
+ */
 export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
         const opdId = req.opd_id;
@@ -514,6 +629,11 @@ export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise
     }
 };
 
+/*
+ * CREATE KADER BY OPD
+ * Sama seperti createKader, tapi otomatis menggunakan opd_id
+ * dari middleware (tidak perlu kirim opd_id di body).
+ */
 export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     const opdId = req.opd_id;
     const { nama_kader, deskripsi, nik_pic, nama_pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
@@ -625,6 +745,11 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
     }
 };
 
+/*
+ * UPDATE KADER BY OPD
+ * Memperbarui kader milik OPD sendiri.
+ * Ada validasi tambahan: kader harus milik OPD yang sedang login.
+ */
 export const updateKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
         const opdId = req.opd_id;
@@ -668,6 +793,11 @@ export const updateKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
     }
 };
 
+/*
+ * DELETE KADER BY OPD
+ * Hanya bisa menghapus kader milik OPD sendiri.
+ * Ada validasi kepemilikan (kader_id + opd_id).
+ */
 export const deleteKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
         const opdId = req.opd_id;
@@ -694,7 +824,8 @@ export const deleteKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
 };
 
 // ============================================================
-// BULK CREATE OPD — dipakai via /api/opd-admin/kader/bulk
+// BAGIAN 3: BULK CREATE — /api/opd-admin/kader/bulk
+// Import Excel khusus OPD (scoped ke OPD sendiri)
 // ============================================================
 
 export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
@@ -840,9 +971,22 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
 };
 
 // ============================================================
-// ASSIGN PIC & HISTORI — dipakai oleh super_admin & opd
+// BAGIAN 4: ASSIGN PIC & HISTORY
+// Digunakan oleh super_admin dan OPD untuk:
+// - Mengganti PIC (Person In Charge) kader
+// - Melihat history pergantian PIC
 // ============================================================
 
+/*
+ * ASSIGN PIC KADER
+ * Mengganti PIC (Person In Charge) untuk suatu kader.
+ *
+ * Alur:
+ * 1. Nonaktifkan PIC lama (status_keaktifan = 'Tidak Aktif')
+ * 2. Insert PIC baru dengan tanggal_mulai = hari ini
+ *
+ * PIC lama tidak dihapus, hanya dinonaktifkan untuk menjaga history.
+ */
 export const assignPicKader = async (req: AuthRequest, res: Response): Promise<void> => {
     const kaderId = parseInt(req.params.id as string);
     const { nik_pic, nama_pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
@@ -943,6 +1087,11 @@ export const assignPicKader = async (req: AuthRequest, res: Response): Promise<v
     }
 };
 
+/*
+ * GET PIC KADER HISTORY
+ * Mengambil history semua PIC yang pernah ditugaskan ke kader ini.
+ * Jika user adalah OPD, query dibatasi hanya untuk kader OPD-nya.
+ */
 export const getPicKaderHistory = async (req: AuthRequest, res: Response): Promise<void> => {
     const kaderId = parseInt(req.params.id as string);
     try {

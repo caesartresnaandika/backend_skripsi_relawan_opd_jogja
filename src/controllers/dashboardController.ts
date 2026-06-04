@@ -1,8 +1,34 @@
+/*
+ * ============================================================
+ * DASHBOARD CONTROLLER — STATISTIK DASHBOARD
+ * ============================================================
+ * Menyediakan data statistik untuk halaman dashboard.
+ * Ada dua fungsi:
+ * 1. getDashboardStats → untuk Super Admin (global)
+ * 2. getOpdDashboardStats → untuk Admin OPD (scope OPD-nya)
+ *
+ * Semua query dijalankan PARALEL menggunakan Promise.all
+ * agar response API secepat mungkin.
+ * ============================================================
+ */
+
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { OpdAuthRequest } from '../middleware/opdMiddleware';
 
+/*
+ * GET DASHBOARD STATS (Super Admin)
+ * Menghitung statistik global:
+ * - Total relawan aktif
+ * - Total OPD
+ * - Total kader
+ * - Pengajuan pending review
+ * - Grafik relawan per OPD
+ * - Demografi gender
+ *
+ * Semua query berjalan paralel via Promise.all.
+ */
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         // Kita jalankan semua query hitung-hitungan ini secara paralel agar response API sangat cepat
@@ -87,6 +113,14 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
     }
 };
 
+/*
+ * GET OPD DASHBOARD STATS
+ * Statistik untuk dashboard Admin OPD (scope terbatas ke OPD-nya):
+ * - Total relawan aktif di OPD ini
+ * - Total kader di OPD ini
+ * - Grafik relawan per kader
+ * - Nama OPD
+ */
 export const getOpdDashboardStats = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
         const opdId = req.opd_id;

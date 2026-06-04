@@ -1,4 +1,27 @@
-//relawanAdminController
+/*
+ * ============================================================
+ * RELAWAN ADMIN CONTROLLER (Super Admin)
+ * ============================================================
+ * Controller untuk manajemen relawan oleh Super Admin.
+ * Super Admin memiliki akses penuh ke semua data relawan
+ * di semua OPD.
+ *
+ * Fitur:
+ * 1. Lihat daftar semua relawan
+ * 2. Lihat detail relawan + penugasannya
+ * 3. Review pengajuan perubahan data relawan
+ * 4. Tambah relawan (manual single form)
+ * 5. Import/update relawan bulk (Excel)
+ * 6. Update relawan (form edit)
+ * 7. Hapus penugasan relawan
+ *
+ * Strategi Bulk Import (createBulkRelawan):
+ * - NIK sudah ada di database → UPDATE profil (nama, no_hp, alamat)
+ * - NIK baru → INSERT user + relawan baru
+ * - Password default saat insert = NIK (yang nanti bisa diubah relawan)
+ * ============================================================
+ */
+
 import pool from '../../config/db';
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
@@ -8,7 +31,7 @@ import bcrypt from 'bcrypt';
 /**
  * Set RLS context pada raw client — dipanggil tepat setelah BEGIN.
  * Menggunakan set_config(..., true) agar transaction-local, identik dengan db.ts.
- * req.user.id bukan user_id — sesuai shape AuthRequest dari authMiddleware.ts
+ * req.user.id sesuai shape AuthRequest dari authMiddleware.ts
  */
 const setClientContext = async (client: any, user: NonNullable<AuthRequest['user']>) => {
     await client.query("SELECT set_config('app.current_user_id', $1, true)", [user.id.toString()]);
@@ -17,7 +40,7 @@ const setClientContext = async (client: any, user: NonNullable<AuthRequest['user
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. Dapatkan semua relawan
+// 1. GET ALL RELAWAN
 // ─────────────────────────────────────────────────────────────────────────────
 export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -47,7 +70,7 @@ export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<vo
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. Dapatkan detail seorang relawan
+// 2. GET RELAWAN BY ID
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRelawanById = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
@@ -116,7 +139,7 @@ export const getRelawanById = async (req: AuthRequest, res: Response): Promise<v
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. Daftar antrian pengajuan perubahan data
+// 3. GET PENGAJUAN PERUBAHAN DATA (Antrian Review)
 // ─────────────────────────────────────────────────────────────────────────────
 export const getPengajuanPerubahanDaftar = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -138,7 +161,14 @@ export const getPengajuanPerubahanDaftar = async (req: AuthRequest, res: Respons
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. Review Pengajuan (Approve / Reject)
+// 4. REVIEW PENGAJUAN (Approve / Reject)
+// Alur:
+// 1. Ambil data pengajuan yang statusnya 'Menunggu Review'
+// 2. Jika Disetujui:
+//    a. Parse data_baru (JSON)
+//    b. Update nama_lengkap di tabel users
+//    c. Update alamat_ktp di tabel relawan
+// 3. Update status pengajuan di tabel pengajuan_perubahan_data
 // ─────────────────────────────────────────────────────────────────────────────
 export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
@@ -214,7 +244,9 @@ export const reviewPengajuan = async (req: AuthRequest, res: Response): Promise<
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. Tambah Relawan (Single Form)
+// 5. CREATE RELAWAN (Single Form)
+// Membuat relawan baru beserta penugasannya dalam satu transaksi.
+// Password default = NIK (untuk login pertama)
 // ─────────────────────────────────────────────────────────────────────────────
 export const createRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
     const nik           = req.body.nik;
@@ -298,7 +330,21 @@ export const createRelawan = async (req: AuthRequest, res: Response): Promise<vo
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. Tambah / Update Relawan Bulk (Excel)
+// 6. CREATE / UPDATE BULK RELAWAN (Excel Import)
+//
+// Strategi Upsert:
+// - NIK sudah ada di users → UPDATE profil user + relawan
+//   - UPDATE nama_lengkap, no_hp di tabel users
+//   - UPDATE jenis_kelamin, alamat_ktp, kelurahan di tabel relawan
+// - NIK baru → INSERT user + relawan baru
+//   - Password default = NIK (di-hash dengan bcrypt + pepper)
+//
+// Penugasan:
+// - Jika relawan sudah punya penugasan di OPD yang sama → UPDATE
+// - Jika belum → INSERT penugasan baru
+//
+// Setiap baris Excel diproses dalam transaksi terpisah.
+// Baris gagal tidak mempengaruhi baris lain.
 // ─────────────────────────────────────────────────────────────────────────────
 export const createBulkRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
     const rawData = req.body;
@@ -504,7 +550,8 @@ export const createBulkRelawan = async (req: AuthRequest, res: Response): Promis
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. Kader by OPD (dropdown)
+// 7. GET KADER BY OPD (untuk dropdown di form)
+// Mengambil daftar kader. Filter by opd_id opsional.
 // ─────────────────────────────────────────────────────────────────────────────
 export const getkaderByOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     const { opd_id } = req.query;
@@ -520,7 +567,9 @@ export const getkaderByOpd = async (req: AuthRequest, res: Response): Promise<vo
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. Update Relawan (form edit)
+// 8. UPDATE RELAWAN (Form Edit)
+// Memperbarui data relawan (nama, alamat, jenis kelamin) dan
+// penugasannya (tambah/edit/hapus assignment).
 // ─────────────────────────────────────────────────────────────────────────────
 export const updateRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
     const relawanId = parseInt(req.params.relawan_id as string);
@@ -598,7 +647,8 @@ export const updateRelawan = async (req: AuthRequest, res: Response): Promise<vo
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 9. Hapus Penugasan
+// 9. DELETE PENUGASAN
+// Menghapus penugasan relawan (bukan menghapus relawan-nya).
 // ─────────────────────────────────────────────────────────────────────────────
 export const deletePenugasan = async (req: AuthRequest, res: Response): Promise<void> => {
     const penugasanId = parseInt(req.params.penugasan_id as string);

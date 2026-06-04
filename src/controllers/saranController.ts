@@ -1,12 +1,27 @@
-//saranController
+/*
+ * ============================================================
+ * SARAN CONTROLLER — FEEDBACK / SARAN MASUKAN
+ * ============================================================
+ * Mengelola saran dan masukan dari pengguna.
+ *
+ * Fitur:
+ * 1. CREATE (POST /api/saran): Semua user yang login bisa kirim saran
+ * 2. GET ALL (GET /api/saran/admin): Super Admin lihat semua saran
+ * 3. UPDATE STATUS (PATCH /api/saran/admin/:id/baca): Admin tandai selesai
+ *
+ * Status saran: 'Menunggu' (default) atau 'Selesai'
+ * ============================================================
+ */
+
 import { Request, Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 
 /**
- * GET /api/saran/admin
- * Mengambil semua saran masukan. Hanya untuk Super Admin.
- * Mendukung query: ?page=1&limit=10&status=Menunggu|Selesai
+ * GET ALL SARAN (Admin only)
+ * Mengambil semua saran masukan dengan pagination dan filter status.
+ * Endpoint: GET /api/saran/admin
+ * Query: ?page=1&limit=10&status=Menunggu|Selesai
  */
 export const getAllSaran = async (req: AuthRequest, res: Response): Promise<void> => {
     try {

@@ -1,6 +1,21 @@
--- CREATE_VIEW
+-- ================================================================
+-- DATABASE VIEWS — Pandangan untuk kemudahan query
+-- ================================================================
+-- View adalah query yang disimpan sebagai tabel virtual.
+-- Berguna untuk menyederhanakan query kompleks yang sering dipakai.
+--
+-- Daftar View:
+-- 1. vw_dashboard_statistik → Ringkasan angka dashboard
+-- 2. vw_komunitas_saya      → Data relawan + kader + OPD + SK
+-- 3. vw_relawan_per_opd     → Jumlah relawan per OPD
+-- 4. vw_riwayat_pengajuan   → Riwayat pengajuan perubahan data
+-- 5. vw_statistik_gender    → Demografi gender relawan
+-- ================================================================
 
--- public.vw_dashboard_statistik source
+-- 1. vw_dashboard_statistik
+-- Menggabungkan beberapa metrik dashboard dalam satu view:
+-- total_opd, total_relawan, total_relawan_aktif, total_pengajuan_pending
+-- Menggunakan UNION ALL untuk menggabungkan baris-baris metrik.
 CREATE OR REPLACE VIEW public.vw_dashboard_statistik
 AS SELECT 'total_opd'::text AS metric,
     count(*)::text AS value
@@ -24,7 +39,9 @@ UNION ALL
   WHERE pengajuan_perubahan_data.status = 'Menunggu Review'::status_pengajuan;
 
 
--- public.vw_komunitas_saya source
+-- 2. vw_komunitas_saya
+-- Menampilkan informasi lengkap relawan beserta kader, OPD, dan SK-nya.
+-- Filter: hanya relawan dengan role = 'relawan' dan status aktif.
 CREATE OR REPLACE VIEW public.vw_komunitas_saya
 AS SELECT u.user_id,
     r.relawan_id,
@@ -46,7 +63,9 @@ AS SELECT u.user_id,
      LEFT JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id
   WHERE u.role = 'relawan'::user_role AND u.status_keaktifan = true;
 
--- public.vw_relawan_per_opd source
+-- 3. vw_relawan_per_opd
+-- Menampilkan jumlah relawan per OPD, termasuk yang aktif.
+-- LEFT JOIN digunakan agar OPD tanpa relawan tetap muncul.
 CREATE OR REPLACE VIEW public.vw_relawan_per_opd
 AS SELECT o.opd_id,
     o.nama_opd,
@@ -64,7 +83,9 @@ AS SELECT o.opd_id,
   GROUP BY o.opd_id, o.nama_opd
   ORDER BY (count(pr.relawan_id)) DESC;
 
--- public.vw_riwayat_pengajuan source
+-- 4. vw_riwayat_pengajuan
+-- Menampilkan riwayat pengajuan perubahan data relawan
+-- beserta nama verifikator yang mereview.
 CREATE OR REPLACE VIEW public.vw_riwayat_pengajuan
 AS SELECT pp.pengajuan_id,
     u.user_id,
@@ -83,8 +104,8 @@ AS SELECT pp.pengajuan_id,
      LEFT JOIN users vu ON pp.verifikator_id = vu.user_id
   ORDER BY pp.tanggal_pengajuan DESC;
 
-  -- public.vw_statistik_gender source
-
+-- 5. vw_statistik_gender
+-- Menampilkan demografi gender relawan (jumlah L dan P).
 CREATE OR REPLACE VIEW public.vw_statistik_gender
 AS SELECT r.jenis_kelamin AS gender,
     count(*) AS jumlah

@@ -1,9 +1,35 @@
-//opdController
+/*
+ * ============================================================
+ * OPD CONTROLLER — MANAJEMEN OPD (Super Admin)
+ * ============================================================
+ * Controller untuk mengelola data OPD (Organisasi Perangkat Daerah).
+ * Hanya Super Admin yang bisa mengakses fitur ini.
+ *
+ * Fitur:
+ * 1. Lihat daftar semua OPD + PIC-nya
+ * 2. Lihat detail OPD
+ * 3. Tambah OPD baru (sekaligus buat akun admin OPD)
+ * 4. Import OPD bulk (Excel)
+ * 5. Update data OPD
+ * 6. Toggle status OPD (aktif/nonaktif) dengan validasi
+ *
+ * Saat membuat OPD baru:
+ * - Otomatis membuat akun user dengan role 'opd'
+ * - Password default = NIK PIC
+ * - Mengikat user ke OPD via tabel pengelola_opd
+ * ============================================================
+ */
+
 import { Response } from 'express';
 import pool, { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import bcrypt from 'bcrypt';
 
+/*
+ * GET ALL OPD
+ * Mengambil daftar semua OPD beserta PIC (Person In Charge) aktif.
+ * LEFT JOIN ke pengelola_opd + users untuk mendapatkan data PIC.
+ */
 export const getAllOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const query = `
@@ -25,6 +51,10 @@ export const getAllOpd = async (req: AuthRequest, res: Response): Promise<void> 
 };
 
 
+/*
+ * GET OPD BY ID
+ * Mengambil detail satu OPD berdasarkan ID.
+ */
 export const getOpdById = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     try {
@@ -50,6 +80,19 @@ export const getOpdById = async (req: AuthRequest, res: Response): Promise<void>
     }
 };
 
+/*
+ * CREATE OPD
+ * Membuat OPD baru + akun admin OPD + mengikatnya di pengelola_opd.
+ *
+ * Alur:
+ * 1. Validasi input (nama OPD, NIK PIC 16 digit, dll)
+ * 2. Cek duplikasi NIK PIC
+ * 3. Buat user baru dengan role 'opd' (password = NIK PIC)
+ * 4. Buat OPD baru
+ * 5. Ikat user ke OPD via tabel pengelola_opd
+ *
+ * Semua dalam 1 transaksi atomic.
+ */
 export const createOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     const { nama_opd, alamat, kontak, nik_pic, nama_pic } = req.body;
     // nama_pic = nama lengkap PIC (opsional, fallback ke nama_opd)
@@ -149,6 +192,13 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
     }
 };
 
+/*
+ * CREATE BULK OPD (Excel Import)
+ * Import banyak OPD sekaligus. Setiap baris diproses dalam
+ * transaksi terpisah (baris gagal tidak menggagalkan baris lain).
+ *
+ * Normalisasi key: semua key diubah ke uppercase + trim spasi.
+ */
 export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     const data = req.body;
 
@@ -265,6 +315,10 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
     }
 };
 
+/*
+ * UPDATE OPD
+ * Memperbarui nama dan alamat OPD.
+ */
 export const updateOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     const { nama_opd, alamat } = req.body;
@@ -314,6 +368,18 @@ export const updateOpd = async (req: AuthRequest, res: Response): Promise<void> 
     }
 };
 
+/*
+ * TOGGLE OPD STATUS
+ * Mengaktifkan/menonaktifkan OPD.
+ *
+ * VALIDASI saat menonaktifkan:
+ * 1. Cek apakah masih ada relawan aktif di OPD ini
+ * 2. Cek apakah masih ada kader aktif di OPD ini
+ * Jika masih ada → tolak penonaktifan dengan pesan yang jelas.
+ *
+ * Ini untuk mencegah OPD dinonaktifkan saat masih memiliki
+ * data aktif yang terkait.
+ */
 export const toggleOpdStatus = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     const { status_keaktifan } = req.body;

@@ -1,4 +1,12 @@
-//skRoutes.ts
+/*
+ * SK ROUTES — Surat Keputusan (Super Admin & OPD)
+ * Base URL: /api/admin/sk
+ * Melindungi semua route dengan verifyToken + authorizeRole('super_admin', 'opd')
+ *
+ * Fitur khusus:
+ * - Upload file PDF (max 2MB) menggunakan multer memoryStorage
+ * - File disimpan sebagai base64 string di database
+ */
 import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 import multer from 'multer';
@@ -15,7 +23,7 @@ import {
 
 const router = Router();
 
-// Konfigurasi Multer untuk upload file PDF
+// Konfigurasi Multer: upload file PDF ke memory (buffer), max 2MB
 const upload = multer({ 
     storage: multer.memoryStorage(),
     limits: {
@@ -30,7 +38,7 @@ const upload = multer({
     }
 });
 
-// Middleware untuk handle error multer
+// Middleware error handler khusus untuk multer
 const handleMulterError = (err: any, req: any, res: any, next: any) => {
     if (err instanceof multer.MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') {
@@ -47,31 +55,31 @@ const handleMulterError = (err: any, req: any, res: any, next: any) => {
     next();
 };
 
-// Protect all routes - hanya super_admin dan opd yang bisa akses
+// Semua route dilindungi — Super Admin dan OPD bisa akses
 router.use(verifyToken, authorizeRole('super_admin', 'opd'));
 
-// URL: GET /api/admin/sk
+// GET  /api/admin/sk — Daftar semua SK
 router.get('/', getAllSK);
 
-// URL: GET /api/admin/sk/opd-list (Dropdown OPD)
+// GET  /api/admin/sk/opd-list — Dropdown OPD
 router.get('/opd-list', getOPDList);
 
-// URL: GET /api/admin/sk/kader-list?opd_id=1 (Dropdown Kader untuk upload SK)
+// GET  /api/admin/sk/kader-list?opd_id= — Dropdown kader untuk target SK
 router.get('/kader-list', getKaderListForSK);
 
-// URL: POST /api/admin/sk (Upload PDF)
+// POST /api/admin/sk — Buat SK baru (+ upload PDF)
 router.post('/', upload.single('file'), handleMulterError, createSK);
 
-// URL: GET /api/admin/sk/:id
+// GET  /api/admin/sk/:id — Detail SK + daftar relawan
 router.get('/:id', getSKById);
 
-// URL: GET /api/admin/sk/:id/pdf
+// GET  /api/admin/sk/:id/pdf — Ambil file PDF SK
 router.get('/:id/pdf', getSKPdf);
 
-// URL: PATCH /api/admin/sk/:id/status
+// PATCH /api/admin/sk/:id/status — Update status SK
 router.patch('/:id/status', updateSKStatus);
 
-// URL: DELETE /api/admin/sk/:id
+// DELETE /api/admin/sk/:id — Hapus SK
 router.delete('/:id', deleteSK);
 
 export default router;

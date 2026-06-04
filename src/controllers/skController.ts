@@ -1,10 +1,45 @@
-//skController.ts
+/*
+ * ============================================================
+ * SK CONTROLLER — SURAT KEPUTUSAN
+ * ============================================================
+ * Controller untuk manajemen Surat Keputusan (SK).
+ * SK adalah dokumen legal yang menaungi penugasan kader dan relawan.
+ *
+ * Fitur utama:
+ * 1. CRUD SK (Create, Read, Update, Delete)
+ * 2. Upload file PDF (disimpan sebagai base64 di database)
+ * 3. Auto-assign SK ke kader & relawan (mode ALL atau KADER_SPESIFIK)
+ * 4. Filter by OPD (untuk role OPD) atau global (untuk super_admin)
+ *
+ * Setiap SK terkait dengan:
+ * - OPD penerbit
+ * - Kader yang tercover
+ * - Penugasan relawan yang terikat
+ * - File PDF (dokumen SK asli)
+ *
+ * Mode assignment:
+ * - 'ALL': SK berlaku untuk semua kader di OPD tersebut
+ * - '[id1,id2,...]': SK hanya berlaku untuk kader tertentu
+ * ============================================================
+ */
+
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import pool from '../../config/db';
 
-// 1. Dapatkan daftar semua SK
+/*
+ * ============================================
+ * 1. GET ALL SK
+ * ============================================
+ * Mengambil daftar semua SK.
+ * - Super Admin: semua SK dari semua OPD
+ * - OPD: hanya SK milik OPD-nya sendiri
+ *
+ * Jumlah relawan dihitung dari UNION:
+ * - penugasan_relawan yang menggunakan SK ini
+ * - pic_kader yang menggunakan SK ini
+ */
 export const getAllSK = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userRole = req.user?.role;
@@ -53,8 +88,17 @@ export const getAllSK = async (req: AuthRequest, res: Response): Promise<void> =
     }
 };
 
-// 2. Dapatkan detail SK beserta daftar relawannya
-export const getSKById = async (req: AuthRequest, res: Response): Promise<void> => {
+/*
+ * ============================================
+ * 2. GET SK BY ID
+ * ============================================
+ * Mengambil detail SK beserta daftar relawan yang terdaftar
+ * di dalam SK tersebut.
+ * - Query 1: Data SK
+ * - Query 2: Daftar relawan yang memiliki penugasan dengan SK ini
+ *
+ * Role OPD: hanya bisa melihat SK milik OPD-nya sendiri.
+ */
     const { id } = req.params;
     try {
         const userRole = req.user?.role;
@@ -111,7 +155,14 @@ export const getSKById = async (req: AuthRequest, res: Response): Promise<void> 
     }
 };
 
-// 3. Endpoint untuk mendapatkan PDF file (sebagai base64)
+/*
+ * ============================================
+ * 3. GET SK PDF
+ * ============================================
+ * Mengambil file_path (base64 string) dari SK.
+ * File PDF disimpan di database sebagai string base64,
+ * bukan di file system.
+ */
 export const getSKPdf = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     try {
@@ -148,7 +199,13 @@ export const getSKPdf = async (req: AuthRequest, res: Response): Promise<void> =
     }
 };
 
-// 4. Endpoint untuk mendapatkan list OPD (untuk dropdown di upload modal)
+/*
+ * ============================================
+ * 4. GET OPD LIST (untuk dropdown)
+ * ============================================
+ * Mengambil daftar OPD yang aktif untuk dropdown
+ * di form upload SK pada frontend.
+ */
 export const getOPDList = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const query = `
@@ -169,7 +226,32 @@ export const getOPDList = async (req: AuthRequest, res: Response): Promise<void>
     }
 };
 
-// 5. Buat SK dengan Upload PDF (Base64) + Validasi Lengkap
+/*
+ * ============================================
+ * 5. CREATE SK
+ * ============================================
+ * Membuat Surat Keputusan baru dengan:
+ * - Upload file PDF (wajib, via multer)
+ * - Data SK (nomor, judul, tanggal)
+ * - Auto-assign ke kader & relawan
+ *
+ * VALIDASI:
+ * 1. File wajib ada
+ * 2. OPD harus ada dan aktif
+ * 3. Nomor SK harus unik (tidak boleh duplikat)
+ *
+ * PROSES AUTO-ASSIGN:
+ * Mode ALL → SK berlaku untuk SEMUA kader di OPD
+ *   - Update sk_id di tabel kader
+ *   - Update sk_id di penugasan_relawan
+ *   - Insert penugasan baru untuk relawan yang belum punya
+ *   - Update sk_id di pic_kader
+ *
+ * Mode KADER_SPESIFIK → SK hanya untuk kader tertentu
+ *   - Sama seperti ALL tapi terbatas pada kader yang dipilih
+ *
+ * Semua dalam 1 transaksi untuk atomicity.
+ */
 export const createSK = async (req: AuthRequest, res: Response): Promise<void> => {
     const {
         nomor_sk,
@@ -452,7 +534,17 @@ export const createSK = async (req: AuthRequest, res: Response): Promise<void> =
     }
 };
 
-// 6. Update Status SK
+/*
+ * ============================================
+ * 6. UPDATE STATUS SK
+ * ============================================
+ * Mengubah status SK menjadi 'Aktif' atau 'Tidak Aktif'.
+ * Role OPD: hanya bisa update SK milik OPD-nya sendiri.
+ *
+ * Input bisa:
+ * - status: 'Aktif' | 'Tidak Aktif' | 'Nonaktif'
+ * - status_keaktifan: boolean
+ */
 export const updateSKStatus = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     const { status, status_keaktifan } = req.body;
@@ -520,8 +612,16 @@ export const updateSKStatus = async (req: AuthRequest, res: Response): Promise<v
     }
 };
 
-// 7. Delete SK
-export const deleteSK = async (req: AuthRequest, res: Response): Promise<void> => {
+/*
+ * ============================================
+ * 7. DELETE SK
+ * ============================================
+ * Menghapus SK. Sebelum dihapus, dicek apakah masih ada
+ * relawan yang ditugaskan dengan SK ini.
+ * Jika masih ada → tolak penghapusan.
+ *
+ * Role OPD: hanya bisa hapus SK milik OPD-nya sendiri.
+ */
     const { id } = req.params;
 
     try {
@@ -588,8 +688,16 @@ export const deleteSK = async (req: AuthRequest, res: Response): Promise<void> =
     }
 };
 
-// 8. Dapatkan daftar kader berdasarkan OPD (untuk dropdown Target Kader di upload SK)
-export const getKaderListForSK = async (req: AuthRequest, res: Response): Promise<void> => {
+/*
+ * ============================================
+ * 8. GET KADER LIST FOR SK DROPDOWN
+ * ============================================
+ * Mengambil daftar kader aktif berdasarkan OPD.
+ * Untuk dropdown "Target Kader" di form upload SK.
+ *
+ * Role OPD: otomatis menggunakan opd_id dari token
+ * Super Admin: menggunakan query parameter ?opd_id=
+ */
     try {
         const userRole = req.user?.role;
         const userOpdId = (req.user as any)?.opd_id;

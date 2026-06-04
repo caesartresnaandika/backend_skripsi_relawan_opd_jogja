@@ -1,6 +1,24 @@
+/*
+ * ============================================================
+ * SETTINGS CONTROLLER — HOTLINE SETTINGS
+ * ============================================================
+ * Mengelola pengaturan hotline (telepon, WhatsApp, jam layanan)
+ * yang ditampilkan di frontend untuk informasi kontak.
+ *
+ * Fitur:
+ * 1. GET: Mengambil setting hotline terbaru (public)
+ * 2. PUT: Update setting hotline (Super Admin only)
+ * ============================================================
+ */
+
 import { Request, Response } from 'express';
 import pool from '../../config/db';
 
+/*
+ * GET HOTLINE SETTINGS
+ * Mengambil setting hotline yang paling terakhir diupdate.
+ * Public endpoint (tanpa auth).
+ */
 export const getHotlineSettings = async (req: Request, res: Response) => {
     try {
         const result = await pool.query('SELECT telepon, whatsapp, jam_layanan, updated_at FROM hotline_settings ORDER BY id_saranhotline DESC LIMIT 1');

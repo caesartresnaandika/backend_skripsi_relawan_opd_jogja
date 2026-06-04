@@ -152,6 +152,7 @@ LEFT JOIN public.relawan r ON u.user_id = r.user_id
 WHERE u.role = 'relawan' 
   AND r.relawan_id IS NULL;
 
+
 -- RLS TERBARU DARI SETIAP TABLE YANG DI AMBIL DARI SUPABASE DENGAN FORMAT JSON
 -- dengan QUERY SEPERTI INI :
 -- SELECT *
@@ -161,6 +162,16 @@ WHERE u.role = 'relawan'
 -- Table users, surat_keputusan, pengelola_opd, pic_kader, saran_masukan, hotline_settings, dan audit_logs saat aku jalankan querynya, tidak ada rls policy
 
 [
+  {
+    "schemaname": "public",
+    "tablename": "penugasan_relawan",
+    "policyname": "opd_access_penugasan",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "((current_setting('app.current_user_role'::text, true) = 'opd'::text) AND (opd_id = (current_setting('app.current_opd_id'::text, true))::integer))",
+    "with_check": null
+  },
   {
     "schemaname": "public",
     "tablename": "penugasan_relawan",
@@ -184,6 +195,26 @@ WHERE u.role = 'relawan'
 ]
 
 [
+  {
+    "schemaname": "public",
+    "tablename": "relawan",
+    "policyname": "opd_insert_relawan",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(current_setting('app.current_user_role'::text, true) = 'opd'::text)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "relawan",
+    "policyname": "opd_update_relawan",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "((current_setting('app.current_user_role'::text, true) = 'opd'::text) AND (relawan_id IN ( SELECT pr.relawan_id\n   FROM penugasan_relawan pr\n  WHERE (pr.opd_id = (current_setting('app.current_opd_id'::text, true))::integer))))",
+    "with_check": "(current_setting('app.current_user_role'::text, true) = 'opd'::text)"
+  },
   {
     "schemaname": "public",
     "tablename": "relawan",

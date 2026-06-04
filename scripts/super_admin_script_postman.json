@@ -1,0 +1,1216 @@
+{
+  "info": {
+    "_postman_id": "8be90dcc-9878-43bd-b577-b438c3722811",
+    "name": "Super Admin - Relawan Bappeda",
+    "description": "Koleksi Postman untuk pengujian fitur-fitur Role Super Admin.\nData test menggunakan akun Super Admin (NIK: 1234567890100011).\nDefault password = NIK akun.\n\nUrutan pengujian yang disarankan:\n1. Login → 2. Kelola OPD → 3. Kelola Kader → 4. Kelola Relawan → 5. SK → 6. Dashboard & Log → 7. Saran → 8. Pengaturan → 9. Ubah Password → 10. Logout",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "48588638",
+    "_collection_link": "https://go.postman.co/collection/48588638-8be90dcc-9878-43bd-b577-b438c3722811?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "1. Tes Koneksi Server",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Server berjalan (Status 200)\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{url}}",
+          "host": [
+            "{{url}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "2. Login Super Admin",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - Login berhasil\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response memiliki token\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('token');",
+              "});",
+              "",
+              "pm.test(\"Role adalah super_admin\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.user.role).to.equal('super_admin');",
+              "});",
+              "",
+              "// Auto-simpan token ke environment",
+              "var jsonData = pm.response.json();",
+              "if (jsonData.token) {",
+              "    pm.environment.set(\"jwt_token\", jsonData.token);",
+              "    console.log(\"Token Super Admin berhasil disimpan!\");",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nik\": \"1234567890100011\",\n  \"password\": \"1234567890100011\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/auth/login",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "3. Tambah OPD",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 201 - OPD berhasil ditambahkan\", function () {",
+              "    pm.expect(pm.response.code).to.equal(201);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"nama_opd\": \"Dinas Pendidikan Pusat\",\n    \"alamat\": \"Jl. Pendidikan No 1\",\n    \"kontak\": \"0274123456\",\n    \"nik_pic\": \"3471020602010001\",\n    \"nama_pic\": \"Bapak Budi\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/opd",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "opd"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "4. Tambah OPD Bulk (Import Excel)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 201 - Bulk OPD berhasil\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+              "});",
+              "",
+              "pm.test(\"Response memiliki data inserted\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.data).to.have.property('insertedCount');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "[\n    {\n        \"NAMA OPD\": \"Dinas Kesehatan\",\n        \"ALAMAT\": \"Jl. Kesehatan No 3\",\n        \"NIK PIC\": \"3471030703020001\",\n        \"PIC\": \"Ibu Ratna\",\n        \"KONTAK\": \"0274654321\"\n    },\n    {\n        \"NAMA OPD\": \"Dinas Sosial\",\n        \"ALAMAT\": \"Jl. Sosial No 7\",\n        \"NIK PIC\": \"3471040804030001\",\n        \"PIC\": \"Bapak Heru\",\n        \"KONTAK\": \"0274111222\"\n    }\n]",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/opd/bulk",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "opd",
+            "bulk"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "5. Ubah Data OPD",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - OPD berhasil diperbarui\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"nama_opd\": \"Dinas Pendidikan\",\n    \"alamat\": \"Jl. Pendidikan No 1\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/opd/1",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "opd",
+            "1"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "6. Tambah Kader",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 201 - Kader berhasil ditambahkan\", function () {",
+              "    pm.expect(pm.response.code).to.equal(201);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"opd_id\": 1,\n    \"nama_kader\": \"Kader Pendidikan\",\n    \"deskripsi\": \"Kader untuk pendidikan\",\n    \"nama_pic\": \"Ibu Siti\",\n    \"nik_pic\": \"3471090209020001\",\n    \"no_hp_pic\": \"08123456789\",\n    \"alamat_pic\": \"Jl. Melati\",\n    \"kelurahan_pic\": \"Mergangsan\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/kader",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "kader"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "7. Tambah Kader Bulk (Import Excel)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 201 - Bulk Kader berhasil\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+              "});",
+              "",
+              "pm.test(\"Response memiliki data inserted\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.data).to.have.property('insertedCount');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "[\n    {\n        \"Nama Kader\": \"Kader Melati\",\n        \"OPD\": \"Dinas Pendidikan\",\n        \"Deskripsi\": \"Kader wilayah utara\",\n        \"NIK PIC\": \"3471100310030001\",\n        \"PIC\": \"Bapak Andi\",\n        \"No HP PIC\": \"081234567890\",\n        \"Alamat PIC\": \"Jl. Melati 3\",\n        \"Kelurahan PIC\": \"Mergangsan\"\n    },\n    {\n        \"Nama Kader\": \"Kader Mawar\",\n        \"OPD\": \"Dinas Pendidikan\",\n        \"Deskripsi\": \"Kader wilayah selatan\",\n        \"NIK PIC\": \"3471110411040001\",\n        \"PIC\": \"Ibu Dewi\",\n        \"No HP PIC\": \"081298765432\",\n        \"Alamat PIC\": \"Jl. Mawar 8\",\n        \"Kelurahan PIC\": \"Prawirodirjan\"\n    }\n]",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/kader/bulk",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "kader",
+            "bulk"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "8. Ubah Data Kader",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - Kader berhasil diperbarui\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"nama_kader\": \"Kader Pendidikan\",\n    \"deskripsi\": \"Kader untuk pendidikan wilayah kota\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/kader/1",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "kader",
+            "1"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "9. Tambah Relawan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 201 - Relawan berhasil ditambahkan\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"nik\": \"3471080508040001\",\n    \"nama_lengkap\": \"Budi\",\n    \"alamat_ktp\": \"Jl. Mawar 5\",\n    \"kelurahan\": \"Mergangsan\",\n    \"jenis_kelamin\": \"L\",\n    \"no_hp\": \"081298765432\",\n    \"assignments\": [\n        {\n            \"opd_id\": 1,\n            \"kader_id\": 1,\n            \"peran\": \"Anggota\",\n            \"detail\": \"Logistik\",\n            \"penugasan\": \"Dinas Pendidikan\",\n            \"statusKeaktifan\": \"Aktif\"\n        }\n    ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/admin/relawan",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "relawan"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "10. Tambah Relawan Bulk (Import Excel)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 201 - Bulk Relawan berhasil\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+              "});",
+              "",
+              "pm.test(\"Response memiliki data inserted\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData.data).to.have.property('insertedCount');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "[\n    {\n        \"nik\": \"3471120609050001\",\n        \"nama_lengkap\": \"Andi Pratama\",\n        \"jenis_kelamin\": \"L\",\n        \"alamat_ktp\": \"Jl. Magelang No 5\",\n        \"kelurahan\": \"Sinduadi\",\n        \"no_hp\": \"081200001111\"\n    },\n    {\n        \"nik\": \"3471130710060001\",\n        \"nama_lengkap\": \"Siti Rahayu\",\n        \"jenis_kelamin\": \"P\",\n        \"alamat_ktp\": \"Jl. Kaliurang Km 7\",\n        \"kelurahan\": \"Caturtunggal\",\n        \"no_hp\": \"085300002222\"\n    }\n]",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/admin/relawan/bulk",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "relawan",
+            "bulk"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "11. Ubah Data Relawan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - Relawan berhasil diperbarui\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"nik\": \"3471080508040001\",\n    \"nama_lengkap\": \"Budi Santoso\",\n    \"alamat_ktp\": \"Jl. Mawar 5\",\n    \"kelurahan\": \"Mergangsan\",\n    \"jenis_kelamin\": \"L\",\n    \"no_hp\": \"081298765432\",\n    \"assignments\": [\n        {\n            \"opd_id\": 1,\n            \"kader_id\": 1,\n            \"peran\": \"Ketua\",\n            \"detail\": \"Divisi\",\n            \"penugasan\": \"Dinas Pendidikan\",\n            \"statusKeaktifan\": \"Aktif\"\n        }\n    ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/admin/relawan/1",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "relawan",
+            "1"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "12. Unggah Surat Keputusan (SK)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Jika file PDF tidak dilampirkan, server akan menolak dengan 400",
+              "// Jika file dilampirkan, server akan menerima dengan 200/201",
+              "pm.test(\"Response valid (201 jika file dilampirkan, 400 jika tanpa file)\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 400]);",
+              "});",
+              "",
+              "pm.test(\"Response memiliki pesan yang sesuai\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    if (pm.response.code === 400) {",
+              "        pm.expect(jsonData.message).to.include('File PDF SK wajib diunggah');",
+              "    } else {",
+              "        pm.expect(jsonData.success).to.be.true;",
+              "    }",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "description": "Pilih file SK dalam format PDF",
+              "src": "/D:/ISTJ.pdf"
+            },
+            {
+              "key": "nomor_sk",
+              "value": "800/124/BPBD/2026",
+              "type": "text"
+            },
+            {
+              "key": "judul_sk",
+              "value": "Penugasan Relawan Tahap 2",
+              "type": "text"
+            },
+            {
+              "key": "tanggal_terbit",
+              "value": "2026-03-27",
+              "type": "text"
+            },
+            {
+              "key": "batas_aktif",
+              "value": "2027-03-27",
+              "type": "text"
+            },
+            {
+              "key": "opd_id",
+              "value": "1",
+              "type": "text"
+            },
+            {
+              "key": "daftar_relawan",
+              "value": "",
+              "type": "text",
+              "description": "Opsional: daftar relawan_id yang ditugaskan"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{url}}/api/admin/sk",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "sk"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "13. Lihat Daftar SK",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - Berhasil mengambil daftar SK\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{url}}/api/admin/sk",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "sk"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "14. Lihat Dashboard",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - Dashboard berhasil dimuat\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{url}}/api/admin/dashboard",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "dashboard"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "15. Lihat Log Aktivitas",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - Log berhasil dimuat\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{url}}/api/admin/logs",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "logs"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "16. Lihat Daftar Saran Masukan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - Daftar saran berhasil dimuat\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response sukses dengan data\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData).to.have.property('data');",
+              "    pm.expect(jsonData).to.have.property('pagination');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{url}}/api/saran/admin",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "saran",
+            "admin"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "17. Menandai Saran Selesai",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - Saran berhasil ditandai\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"status_keaktifan\": \"Selesai\",\n    \"catatan_admin\": \"Baik kak, saran akan segera kami proses.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/saran/admin/1/baca",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "saran",
+            "admin",
+            "1",
+            "baca"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "18. Lihat Daftar Pengajuan Perubahan Data",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - Daftar pengajuan berhasil dimuat\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{url}}/api/admin/relawan/pengajuan",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "relawan",
+            "pengajuan"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "19. Ubah Kata Sandi Super Admin",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - Password berhasil diubah\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "    pm.expect(jsonData.message).to.equal('Password berhasil diubah');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"password_lama\": \"1234567890100011\",\n    \"password_baru\": \"SuperAdmin2026\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/profile/change-password",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "profile",
+            "change-password"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "20. Nonaktifkan Relawan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - Relawan berhasil dinonaktifkan\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"nik\": \"3471080508040001\",\n    \"nama_lengkap\": \"Budi Santoso\",\n    \"alamat_ktp\": \"Jl. Mawar 5\",\n    \"kelurahan\": \"Mergangsan\",\n    \"jenis_kelamin\": \"L\",\n    \"no_hp\": \"081298765432\",\n    \"assignments\": [\n        {\n            \"opd_id\": 1,\n            \"kader_id\": 1,\n            \"peran\": \"Anggota\",\n            \"detail\": \"Logistik\",\n            \"penugasan\": \"Dinas Pendidikan\",\n            \"statusKeaktifan\": \"Tidak Aktif\"\n        }\n    ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/admin/relawan/60",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "relawan",
+            "60"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "21. Nonaktifkan Kader",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - Status Kader berhasil diubah\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"status_keaktifan\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/kader/15/status",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "kader",
+            "15",
+            "status"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "22. Nonaktifkan OPD",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status 200 - Status OPD berhasil diubah\", function () {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "pm.test(\"Response sukses\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.success).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"status_keaktifan\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/opd/8/status",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "opd",
+            "8",
+            "status"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "23. Logout",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Logout dilakukan client-side dengan menghapus token",
+              "// Pada Postman, kita hapus variable jwt_token dari environment",
+              "pm.environment.unset(\"jwt_token\");",
+              "console.log(\"Token berhasil dihapus. Super Admin telah logout.\");"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Token sudah dihapus dari environment\", function () {",
+              "    var token = pm.environment.get(\"jwt_token\");",
+              "    pm.expect(token).to.be.undefined;",
+              "});",
+              "",
+              "pm.test(\"Request tanpa token ditolak (401/403)\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([401, 403]);",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{url}}/api/admin/dashboard",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "dashboard"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-simpan token dari response login",
+          "if (pm.response.code === 200 || pm.response.code === 201) {",
+          "    var jsonData = pm.response.json();",
+          "    if (jsonData.token) {",
+          "        pm.environment.set(\"jwt_token\", jsonData.token);",
+          "        console.log(\"Token berhasil disimpan!\");",
+          "    } else if (jsonData.data && jsonData.data.token) {",
+          "        pm.environment.set(\"jwt_token\", jsonData.data.token);",
+          "        console.log(\"Token berhasil disimpan!\");",
+          "    }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "url",
+      "value": "http://localhost:3000"
+    }
+  ]
+}
