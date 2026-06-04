@@ -1,4 +1,23 @@
-//opRelawanController.ts
+/*
+ * ============================================================
+ * OPD RELAWAN CONTROLLER
+ * ============================================================
+ * Controller untuk manajemen relawan oleh Admin OPD.
+ * Berbeda dengan relawanAdminController (super admin),
+ * controller ini hanya bisa mengakses relawan yang terdaftar
+ * di OPD-nya sendiri (di-scope oleh req.opd_id).
+ *
+ * Fitur:
+ * 1. Lihat daftar relawan milik OPD sendiri
+ * 2. Lihat daftar SK milik OPD sendiri
+ * 3. Tambah relawan (manual, terikat ke OPD ini)
+ * 4. Import/update bulk relawan (Excel, khusus OPD ini)
+ * 5. Update relawan (form edit, khusus OPD ini)
+ * 6. Hapus penugasan (khusus OPD ini)
+ * 7. Review pengajuan perubahan data (relawan di OPD ini)
+ * ============================================================
+ */
+
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { OpdAuthRequest } from '../middleware/opdMiddleware';
@@ -8,7 +27,8 @@ import bcrypt from 'bcrypt';
 /**
  * Set RLS context pada raw client — dipanggil tepat setelah BEGIN.
  * Menggunakan set_config(..., true) agar transaction-local, identik dengan db.ts.
- * user.id bukan user_id — sesuai shape AuthRequest dari authMiddleware.ts
+ * user.id sesuai shape AuthRequest dari authMiddleware.ts
+ * opdId ditentukan dari middleware atau parameter.
  */
 const setClientContext = async (client: any, user: NonNullable<OpdAuthRequest['user']>, opdId?: number) => {
     await client.query("SELECT set_config('app.current_user_id', $1, true)", [user.id.toString()]);
@@ -17,7 +37,8 @@ const setClientContext = async (client: any, user: NonNullable<OpdAuthRequest['u
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. Daftar Relawan milik OPD
+// 1. GET RELAWAN BY OPD
+// Mengambil semua relawan yang memiliki penugasan di OPD ini.
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
@@ -47,7 +68,8 @@ export const getRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promi
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. Daftar SK milik OPD
+// 2. GET SK BY OPD
+// Mengambil daftar SK yang diterbitkan oleh OPD ini.
 // ─────────────────────────────────────────────────────────────────────────────
 export const getSkByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
@@ -68,7 +90,10 @@ export const getSkByOpd = async (req: OpdAuthRequest, res: Response): Promise<vo
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. Tambah Relawan Manual (1 penugasan, khusus OPD ini)
+// 3. CREATE RELAWAN (Manual, khusus OPD ini)
+// Membuat relawan baru dengan 1 penugasan ke OPD ini.
+// Password default = NIK (untuk login pertama relawan).
+// OPD ID otomatis dari middleware (tidak perlu dikirim di body).
 // ─────────────────────────────────────────────────────────────────────────────
 export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     const opdId     = req.opd_id!;
@@ -150,7 +175,14 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. Tambah / Update Relawan Bulk Excel (khusus OPD ini)
+// 4. CREATE / UPDATE BULK RELAWAN (Excel Import, khusus OPD ini)
+//
+// Strategi Upsert:
+// - NIK sudah ada → UPDATE profil (nama, no_hp, alamat)
+// - NIK baru → INSERT user + relawan baru
+//
+// Penugasan selalu mengarah ke OPD ini (tidak bisa pilih OPD lain).
+// Kader dicari berdasarkan nama di dalam OPD ini.
 // ─────────────────────────────────────────────────────────────────────────────
 export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     const rawData = req.body;
@@ -344,7 +376,8 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. Update Relawan (form edit, khusus OPD ini)
+// 5. UPDATE RELAWAN (Form Edit, khusus OPD ini)
+// Sebelum update, dicek apakah relawan benar-benar terdaftar di OPD ini.
 // ─────────────────────────────────────────────────────────────────────────────
 export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     const opdId     = req.opd_id!;
@@ -429,7 +462,8 @@ export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. Hapus Penugasan (khusus OPD ini)
+// 6. DELETE PENUGASAN (khusus OPD ini)
+// Hanya bisa hapus penugasan milik OPD sendiri.
 // ─────────────────────────────────────────────────────────────────────────────
 export const deletePenugasanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     const penugasanId = parseInt(req.params.penugasan_id as string);
@@ -450,7 +484,10 @@ export const deletePenugasanByOpd = async (req: OpdAuthRequest, res: Response): 
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. Pengajuan Perubahan Data (Khusus OPD)
+// 7. PENGAJUAN PERUBAHAN DATA (Khusus OPD)
+// Mengambil antrian pengajuan perubahan data dari relawan
+// yang terdaftar di OPD ini. Hanya menampilkan pengajuan dari
+// relawan yang memiliki penugasan di OPD ini (via EXISTS clause).
 // ─────────────────────────────────────────────────────────────────────────────
 export const getPengajuanPerubahanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {

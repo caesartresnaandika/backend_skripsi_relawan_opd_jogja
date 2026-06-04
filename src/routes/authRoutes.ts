@@ -1,13 +1,16 @@
-//authRoutes.ts
+/*
+ * AUTH ROUTES — Autentikasi (Public)
+ * Base URL: /api/auth
+ */
 import { Router } from 'express';
 import { register, login } from '../controllers/authController';
 
 const router = Router();
 
-// URL: http://localhost:3000/api/auth/register
+// POST /api/auth/register — Daftar akun baru (dilindungi setup key)
 router.post('/register', register);
 
-// URL: http://localhost:3000/api/auth/login
+// POST /api/auth/login — Login (NIK + Password) → dapat token JWT
 router.post('/login', login);
 
 export default router;

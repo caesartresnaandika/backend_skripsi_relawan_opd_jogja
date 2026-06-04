@@ -1,10 +1,34 @@
+/*
+ * ============================================================
+ * PROFILE CONTROLLER — MANAJEMEN PROFIL PENGGUNA
+ * ============================================================
+ * Controller ini menangani pengelolaan profil untuk semua role
+ * (super_admin, opd, relawan) yang sudah login.
+ *
+ * Fitur:
+ * 1. Lihat profil sendiri
+ * 2. Update profil (nama, no_hp, foto)
+ * 3. Ganti password
+ *
+ * Semua fungsi menggunakan `req.user.id` dari token JWT,
+ * sehingga user hanya bisa mengakses profilnya sendiri.
+ * ============================================================
+ */
+
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import bcrypt from 'bcrypt';
 
-// ── 1. GET Profil Saya ────────────────────────────────────────────────────────
-// Semua role: ambil data user dari tabel users berdasarkan token
+/*
+ * ============================================
+ * 1. GET PROFIL SAYA
+ * ============================================
+ * Mengambil data profil user yang sedang login.
+ * Query hanya berdasarkan user_id dari token JWT,
+ * sehingga user tidak bisa melihat profil orang lain.
+ * ============================================
+ */
 export const getMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
     const userId = req.user?.id;
 
@@ -28,8 +52,19 @@ export const getMyProfile = async (req: AuthRequest, res: Response): Promise<voi
     }
 };
 
-// ── 2. UPDATE Profil ──────────────────────────────────────────────────────────
-// Update nama_lengkap dan no_hp (NIK tidak boleh diubah)
+/*
+ * ============================================
+ * 2. UPDATE PROFIL
+ * ============================================
+ * Memperbarui data profil user yang sedang login.
+ * Yang bisa diubah: nama_lengkap, no_hp, foto_profil
+ * NIK tidak bisa diubah (identitas tetap).
+ *
+ * Query dibangun secara dinamis:
+ * - Jika foto_profil dikirim → update kolom foto_profil
+ * - Jika foto_profil bernilai string kosong → set ke null (hapus foto)
+ * ============================================
+ */
 export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
     const userId = req.user?.id;
     const { nama_lengkap, no_hp, foto_profil } = req.body;
@@ -40,6 +75,7 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
     }
 
     try {
+        // Bangun query dinamis — tambah kolom foto_profil hanya jika dikirim
         let updateQuery = `UPDATE users SET nama_lengkap = $1, no_hp = $2, updated_at = CURRENT_TIMESTAMP`;
         const params: any[] = [nama_lengkap, no_hp || null];
 
@@ -70,8 +106,23 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
     }
 };
 
-// ── 3. GANTI PASSWORD ─────────────────────────────────────────────────────────
-// Semua role yang sudah login bisa mengganti password
+/*
+ * ============================================
+ * 3. GANTI PASSWORD
+ * ============================================
+ * Mengganti password user yang sedang login.
+ * Alur:
+ * 1. Ambil password saat ini dari database
+ * 2. Verifikasi password lama (bcrypt.compare + pepper)
+ * 3. Hash password baru dengan bcrypt
+ * 4. Simpan password baru ke database
+ *
+ * Keamanan:
+ * - Password lama harus sesuai sebelum diubah
+ * - Pepper rahasia dari .env ditambahkan sebelum hashing
+ * - Password minimal 6 karakter
+ * ============================================
+ */
 export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
     const { password_lama, password_baru } = req.body;
     const userId = req.user?.id;
@@ -98,7 +149,7 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
             return;
         }
 
-        // 2. Verifikasi password lama
+        // 2. Verifikasi password lama (bcrypt.compare + pepper)
         const isMatch = await bcrypt.compare(password_lama + (process.env.PASSWORD_PEPPER || ''), userRes.rows[0].password);
         if (!isMatch) {
             res.status(400).json({ success: false, message: 'Password lama tidak sesuai' });

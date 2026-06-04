@@ -1,8 +1,24 @@
-//relawanController.ts
+/*
+ * ============================================================
+ * RELAWAN CONTROLLER (LEGACY — VERSI LAMA)
+ * ============================================================
+ * Controller versi awal untuk manajemen relawan.
+ * Masih menggunakan pool.query langsung (tanpa RLS context)
+ * dan tidak menggunakan executeQueryWithContext.
+ *
+ * Sebagian besar fungsionalitas sudah digantikan oleh:
+ * - relawanAdminController.ts (untuk Super Admin)
+ * - opdRelawanController.ts (untuk Admin OPD)
+ *
+ * Masih dipertahankan untuk kompatibilitas dengan fitur lama.
+ * ============================================================
+ */
+
 import { Request, Response } from 'express';
 import pool from '../../config/db';
 
-// 1. AMBIL SEMUA RELAWAN + PENCARIAN (F-05)
+// 1. GET ALL RELAWAN + SEARCH
+// Mendukung pencarian via ?keyword=nama
 export const getAllRelawan = async (req: Request, res: Response): Promise<void> => {
   try {
     const { keyword } = req.query; // Ambil parameter ?keyword=nama

@@ -1,29 +1,30 @@
-//opdRoutes.ts
+/*
+ * OPD ROUTES — Manajemen OPD (Super Admin only)
+ * Base URL: /api/opd
+ * Semua endpoint dilindungi verifyToken + authorizeRole('super_admin')
+ */
 import { Router } from 'express';
 import { getAllOpd, getOpdById, createOpd, createBulkOpd, updateOpd, toggleOpdStatus } from '../controllers/opdController';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 
 const router = Router();
 
-// Karena ini fitur Super Admin, idealnya semua route ini dilindungi token
-// Kita pasang verifyToken DAN authorizeRole 'super_admin' di semua endpoint ini
-
-// URL: GET http://localhost:3000/api/opd
+// GET  /api/opd — Daftar semua OPD
 router.get('/', verifyToken, authorizeRole('super_admin'), getAllOpd);
 
-// URL: GET http://localhost:3000/api/opd/:id
+// GET  /api/opd/:id — Detail OPD
 router.get('/:id', verifyToken, authorizeRole('super_admin'), getOpdById);
 
-// URL: POST http://localhost:3000/api/opd/bulk
+// POST /api/opd/bulk — Import OPD dari Excel
 router.post('/bulk', verifyToken, authorizeRole('super_admin'), createBulkOpd);
 
-// URL: POST http://localhost:3000/api/opd
+// POST /api/opd — Tambah OPD baru (+ buat akun admin OPD)
 router.post('/', verifyToken, authorizeRole('super_admin'), createOpd);
 
-// URL: PUT http://localhost:3000/api/opd/:id
+// PUT  /api/opd/:id — Update data OPD
 router.put('/:id', verifyToken, authorizeRole('super_admin'), updateOpd);
 
-// URL: PATCH http://localhost:3000/api/opd/:id/status
+// PATCH /api/opd/:id/status — Aktif/nonaktifkan OPD
 router.patch('/:id/status', verifyToken, authorizeRole('super_admin'), toggleOpdStatus);
 
 export default router;

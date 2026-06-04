@@ -1,7 +1,26 @@
+/*
+ * ============================================================
+ * RELAWAN DASHBOARD CONTROLLER
+ * ============================================================
+ * Menyediakan data dashboard untuk role relawan.
+ *
+ * Statistik:
+ * - Jumlah SK aktif (penugasan yang sedang berjalan)
+ * - Total kegiatan yang pernah diikuti
+ * - Poin relawan (asumsi: 1 kegiatan = 10 poin)
+ * - Detail penugasan aktif saat ini
+ * ============================================================
+ */
+
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { RelawanAuthRequest } from '../middleware/relawanMiddleware';
 
+/*
+ * GET RELAWAN DASHBOARD STATS
+ * Menampilkan ringkasan aktivitas relawan yang sedang login.
+ * Semua query berjalan paralel via Promise.all.
+ */
 export const getRelawanDashboardStats = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
     try {
         const relawanId = req.relawan_id;

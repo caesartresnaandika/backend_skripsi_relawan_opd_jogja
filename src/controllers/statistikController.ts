@@ -1,9 +1,30 @@
-// statistikController.ts
+/*
+ * ============================================================
+ * STATISTIK CONTROLLER — DATA VISUALISASI CHART
+ * ============================================================
+ * Menyediakan data untuk grafik/chart di frontend.
+ * Semua fungsi menerapkan branching berdasarkan role:
+ * - Super Admin → data global (semua OPD)
+ * - OPD Admin → data terbatas ke OPD-nya sendiri
+ *
+ * Endpoints:
+ * 1. GET /api/statistik/gender → Demografi gender
+ * 2. GET /api/statistik/kelurahan → Demografi kelurahan (top 5)
+ * 3. GET /api/statistik/relawan-per-kader → Relawan per kader (top 5)
+ * 4. GET /api/statistik/kader-per-opd → Kader per OPD (top 5)
+ * ============================================================
+ */
+
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 
-// GET /api/statistik/gender
+/*
+ * GET /api/statistik/gender
+ * Demografi gender relawan.
+ * - Role OPD: scoped ke OPD-nya (via JOIN penugasan_relawan)
+ * - Super Admin: global via view vw_statistik_gender
+ */
 export const getStatistikGender = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user = req.user!;
@@ -31,7 +52,12 @@ export const getStatistikGender = async (req: AuthRequest, res: Response): Promi
     }
 };
 
-// GET /api/statistik/kelurahan
+/*
+ * GET /api/statistik/kelurahan
+ * Top 5 kelurahan dengan relawan terbanyak.
+ * - Role OPD: scoped ke OPD-nya
+ * - Super Admin: global
+ */
 export const getStatistikKelurahan = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user = req.user!;
@@ -72,7 +98,10 @@ export const getStatistikKelurahan = async (req: AuthRequest, res: Response): Pr
     }
 };
 
-// GET /api/statistik/relawan-per-kader
+/*
+ * GET /api/statistik/relawan-per-kader
+ * Top 5 kader dengan jumlah relawan terbanyak.
+ */
 export const getRelawanPerKader = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user = req.user!;
@@ -108,7 +137,10 @@ export const getRelawanPerKader = async (req: AuthRequest, res: Response): Promi
     }
 };
 
-// GET /api/statistik/kader-per-opd
+/*
+ * GET /api/statistik/kader-per-opd
+ * Top 5 OPD dengan jumlah kader terbanyak.
+ */
 export const getKaderPerOPD = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user = req.user!;

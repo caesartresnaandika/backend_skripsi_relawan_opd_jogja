@@ -1,33 +1,60 @@
-//opdMiddleware
+/*
+ * ============================================================
+ * OPD MIDDLEWARE — KONTEKS INSTANSI OPD
+ * ============================================================
+ * Middleware untuk mengambil dan menyediakan konteks OPD
+ * (Organisasi Perangkat Daerah) dari user yang login.
+ *
+ * Digunakan terutama oleh role `opd` (admin OPD) untuk:
+ * 1. Memastikan user terdaftar sebagai pengelola OPD
+ * 2. Menyediakan opd_id di request agar controller tidak
+ *    perlu query ulang ke database
+ * ============================================================
+ */
+
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from './authMiddleware';
 import { executeQueryWithContext } from '../../config/db';
 
+/*
+ * OPD AUTH REQUEST INTERFACE
+ * Memperluas AuthRequest dengan properti opd_id
+ * yang akan diisi oleh middleware ini.
+ */
 export interface OpdAuthRequest extends AuthRequest {
     opd_id?: number;
 }
 
+/*
+ * REQUIRE OPD CONTEXT (WAJIB)
+ * Middleware ini WAJIB dijalankan untuk route yang khusus role OPD.
+ * - Memastikan user memiliki role 'opd'
+ * - Mencari opd_id dari tabel pengelola_opd berdasarkan user_id
+ * - Jika tidak ditemukan → tolak akses (403)
+ * - Jika ditemukan → simpan opd_id di req.opd_id untuk digunakan controller
+ */
 export const requireOpdContext = async (req: OpdAuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        // Harus ada user (dari verifyToken) dan role-nya harus 'opd'
+        // Pastikan user sudah login dan role-nya 'opd'
         if (!req.user || req.user.role !== 'opd') {
             res.status(403).json({ success: false, message: 'Akses ditolak. Layanan ini khusus untuk Role Admin OPD.' });
             return;
         }
 
-        // Cari opd_id-nya di database based on user_id
+        // Query ke tabel pengelola_opd untuk mencari OPD tempat user bekerja
         const result = await executeQueryWithContext(
             `SELECT opd_id FROM pengelola_opd WHERE user_id = $1 AND status_keaktifan = 'Aktif' LIMIT 1`,
             [req.user.id],
             req.user
         );
 
+        // Jika user tidak terdaftar sebagai pengelola OPD manapun
         if (result.rows.length === 0) {
             res.status(403).json({ success: false, message: 'Akses ditolak. Akun Anda belum terikat ke Instansi (OPD) manapun.' });
             return;
         }
 
-        // Simpan opd_id ke request object agar controller di rute ini tidak perlu query ulang
+        // Simpan opd_id ke request agar controller bisa langsung pakai
         req.opd_id = result.rows[0].opd_id;
 
         next();
@@ -38,8 +65,15 @@ export const requireOpdContext = async (req: OpdAuthRequest, res: Response, next
     }
 };
 
-// opdMiddleware.ts — tambahkan fungsi ini di bawah requireOpdContext yang sudah ada
-
+/*
+ * ATTACH OPD ID (OPSIONAL)
+ * Middleware ini OPSIONAL — hanya meng-attach opd_id jika user
+ * memiliki role 'opd'. Untuk role lain, middleware ini langsung
+ * melanjutkan tanpa error.
+ *
+ * Berguna untuk route yang bisa diakses oleh beberapa role
+ * tapi tetap membutuhkan konteks OPD jika user adalah OPD.
+ */
 export const attachOpdId = async (req: OpdAuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         // Hanya jalankan untuk role 'opd', role lain langsung lanjut
@@ -47,9 +81,10 @@ export const attachOpdId = async (req: OpdAuthRequest, res: Response, next: Next
             return next();
         }
 
+        // Cari opd_id walau tanpa filter status_keaktifan
         const result = await executeQueryWithContext(
             `SELECT opd_id FROM pengelola_opd WHERE user_id = $1 LIMIT 1`,
-            [req.user.id],  // pakai req.user.id sesuai konvensi project kamu
+            [req.user.id],
             req.user
         );
 

@@ -1,9 +1,28 @@
-// opdDashboardControllers.ts
+/*
+ * ============================================================
+ * OPD DASHBOARD CONTROLLER
+ * ============================================================
+ * Menyediakan data dashboard khusus untuk Admin OPD.
+ * Data di-scope ke OPD tempat admin bekerja.
+ *
+ * Statistik:
+ * - Total relawan aktif di OPD ini
+ * - Jumlah SK terunggah
+ * - Jumlah kader aktif
+ * - Grafik relawan per kader
+ * - Pie chart status penugasan
+ * ============================================================
+ */
 
 import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { OpdAuthRequest } from '../middleware/opdMiddleware';
 
+/*
+ * GET OPD DASHBOARD STATS
+ * Eksekusi paralel untuk kecepatan maksimal.
+ * Data disesuaikan dengan format yang frontend harapkan.
+ */
 export const getOpdDashboardStats = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
         const opdId = req.opd_id;
