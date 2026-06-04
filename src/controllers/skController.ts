@@ -99,6 +99,7 @@ export const getAllSK = async (req: AuthRequest, res: Response): Promise<void> =
  *
  * Role OPD: hanya bisa melihat SK milik OPD-nya sendiri.
  */
+export const getSKById = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
     try {
         const userRole = req.user?.role;
@@ -622,6 +623,7 @@ export const updateSKStatus = async (req: AuthRequest, res: Response): Promise<v
  *
  * Role OPD: hanya bisa hapus SK milik OPD-nya sendiri.
  */
+export const deleteSK = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
 
     try {
@@ -698,6 +700,7 @@ export const updateSKStatus = async (req: AuthRequest, res: Response): Promise<v
  * Role OPD: otomatis menggunakan opd_id dari token
  * Super Admin: menggunakan query parameter ?opd_id=
  */
+export const getKaderListForSK = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userRole = req.user?.role;
         const userOpdId = (req.user as any)?.opd_id;
