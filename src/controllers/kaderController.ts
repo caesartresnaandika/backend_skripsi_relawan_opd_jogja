@@ -171,7 +171,7 @@ export const getKaderById = async (req: AuthRequest, res: Response): Promise<voi
  * Semua dalam 1 transaksi (BEGIN/COMMIT/ROLLBACK) untuk atomicity.
  */
 export const createKader = async (req: AuthRequest, res: Response): Promise<void> => {
-    const { opd_id, nama_kader, deskripsi, nik_pic, nama_pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
+    const { opd_id, nama_kader, deskripsi, nik_pic, nama_pic, no_hp_pic, alamat_pic, kemantren_pic, kelurahan_pic } = req.body;
 
     // Validasi wajib
     if (!opd_id || !nama_kader) {
@@ -234,9 +234,9 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
             } else {
                 // Ada di users tapi belum ada di relawan → buat profil relawan
                 const relawanRes = await client.query(
-                    `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-                     VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
-                    [userId, alamat_pic || '-', kelurahan_pic || '-']
+                    `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kemantren, kelurahan)
+                     VALUES ($1, 'L', $2, $3, $4) RETURNING relawan_id`,
+                    [userId, alamat_pic || '-', kemantren_pic || '-', kelurahan_pic || '-']
                 );
                 relawanId = relawanRes.rows[0].relawan_id;
             }
@@ -254,9 +254,9 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
             const userId = userRes.rows[0].user_id;
 
             const relawanRes = await client.query(
-                `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-                 VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
-                [userId, alamat_pic || '-', kelurahan_pic || '-']
+                `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kemantren, kelurahan)
+                 VALUES ($1, 'L', $2, $3, $4) RETURNING relawan_id`,
+                [userId, alamat_pic || '-', kemantren_pic || '-', kelurahan_pic || '-']
             );
             relawanId = relawanRes.rows[0].relawan_id;
         }
@@ -474,6 +474,7 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
             const deskripsi = getVal(['deskripsi', 'keterangan']).trim() || null;
             const noHpPic = getVal(['nohppic', 'nohp', 'notelp']).trim() || null;
             const alamatPic = getVal(['alamatpic', 'alamat']).trim() || null;
+            const kemantrenPic = getVal(['kemantrenpic', 'kemantren', 'kecamatan']).trim() || null;
             const kelurahanPic = getVal(['kelurahanpic', 'kelurahan']).trim() || null;
 
             // ── 2. Validasi Dasar ──
@@ -518,9 +519,9 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
                         relawanId = checkRelawan.rows[0].relawan_id;
                     } else {
                         const relawanRes = await client.query(
-                            `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-                             VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
-                            [userId, alamatPic || '-', kelurahanPic || '-']
+                            `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kemantren, kelurahan)
+                             VALUES ($1, 'L', $2, $3, $4) RETURNING relawan_id`,
+                            [userId, alamatPic || '-', kemantrenPic || '-', kelurahanPic || '-']
                         );
                         relawanId = relawanRes.rows[0].relawan_id;
                     }
@@ -535,9 +536,9 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
                     );
                     const userId = userRes.rows[0].user_id;
                     const relawanRes = await client.query(
-                        `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-                         VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
-                        [userId, alamatPic || '-', kelurahanPic || '-']
+                        `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kemantren, kelurahan)
+                         VALUES ($1, 'L', $2, $3, $4) RETURNING relawan_id`,
+                        [userId, alamatPic || '-', kemantrenPic || '-', kelurahanPic || '-']
                     );
                     relawanId = relawanRes.rows[0].relawan_id;
                 }
@@ -636,7 +637,7 @@ export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise
  */
 export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     const opdId = req.opd_id;
-    const { nama_kader, deskripsi, nik_pic, nama_pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
+    const { nama_kader, deskripsi, nik_pic, nama_pic, no_hp_pic, alamat_pic, kemantren_pic, kelurahan_pic } = req.body;
 
     if (!nama_kader) {
         res.status(400).json({ success: false, message: 'Nama kader wajib diisi' });
@@ -692,9 +693,9 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
                 relawanId = checkRelawan.rows[0].relawan_id;
             } else {
                 const relawanRes = await client.query(
-                    `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-                     VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
-                    [userId, alamat_pic || '-', kelurahan_pic || '-']
+                    `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kemantren, kelurahan)
+                     VALUES ($1, 'L', $2, $3, $4) RETURNING relawan_id`,
+                    [userId, alamat_pic || '-', kemantren_pic || '-', kelurahan_pic || '-']
                 );
                 relawanId = relawanRes.rows[0].relawan_id;
             }
@@ -709,9 +710,9 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
             );
             const userId = userRes.rows[0].user_id;
             const relawanRes = await client.query(
-                `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-                 VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
-                [userId, alamat_pic || '-', kelurahan_pic || '-']
+                `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kemantren, kelurahan)
+                 VALUES ($1, 'L', $2, $3, $4) RETURNING relawan_id`,
+                [userId, alamat_pic || '-', kemantren_pic || '-', kelurahan_pic || '-']
             );
             relawanId = relawanRes.rows[0].relawan_id;
         }
@@ -874,6 +875,7 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
             const deskripsi = getVal(['deskripsi', 'keterangan']).trim() || null;
             const noHpPic = getVal(['nohppic', 'nohp', 'notelp']).trim() || null;
             const alamatPic = getVal(['alamatpic', 'alamat']).trim() || null;
+            const kemantrenPic = getVal(['kemantrenpic', 'kemantren', 'kecamatan']).trim() || null;
             const kelurahanPic = getVal(['kelurahanpic', 'kelurahan']).trim() || null;
 
             // ✨ FIXED: Validasi OPD
@@ -906,9 +908,9 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
                         relawanId = checkRelawan.rows[0].relawan_id;
                     } else {
                         const relawanRes = await client.query(
-                            `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-                             VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
-                            [userId, alamatPic || '-', kelurahanPic || '-']
+                            `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kemantren, kelurahan)
+                             VALUES ($1, 'L', $2, $3, $4) RETURNING relawan_id`,
+                            [userId, alamatPic || '-', kemantrenPic || '-', kelurahanPic || '-']
                         );
                         relawanId = relawanRes.rows[0].relawan_id;
                     }
@@ -923,9 +925,9 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
                     );
                     const userId = userRes.rows[0].user_id;
                     const relawanRes = await client.query(
-                        `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-                         VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
-                        [userId, alamatPic || '-', kelurahanPic || '-']
+                        `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kemantren, kelurahan)
+                         VALUES ($1, 'L', $2, $3, $4) RETURNING relawan_id`,
+                        [userId, alamatPic || '-', kemantrenPic || '-', kelurahanPic || '-']
                     );
                     relawanId = relawanRes.rows[0].relawan_id;
                 }
@@ -989,7 +991,7 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
  */
 export const assignPicKader = async (req: AuthRequest, res: Response): Promise<void> => {
     const kaderId = parseInt(req.params.id as string);
-    const { nik_pic, nama_pic, no_hp_pic, alamat_pic, kelurahan_pic } = req.body;
+    const { nik_pic, nama_pic, no_hp_pic, alamat_pic, kemantren_pic, kelurahan_pic } = req.body;
 
     if (!nik_pic) {
         res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
@@ -1037,9 +1039,9 @@ export const assignPicKader = async (req: AuthRequest, res: Response): Promise<v
                 relawanId = checkRelawan.rows[0].relawan_id;
             } else {
                 const relawanRes = await client.query(
-                    `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-                     VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
-                    [userId, alamat_pic || '-', kelurahan_pic || '-']
+                    `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kemantren, kelurahan)
+                     VALUES ($1, 'L', $2, $3, $4) RETURNING relawan_id`,
+                    [userId, alamat_pic || '-', kemantren_pic || '-', kelurahan_pic || '-']
                 );
                 relawanId = relawanRes.rows[0].relawan_id;
             }
@@ -1054,9 +1056,9 @@ export const assignPicKader = async (req: AuthRequest, res: Response): Promise<v
             );
             const userId = userRes.rows[0].user_id;
             const relawanRes = await client.query(
-                `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-                 VALUES ($1, 'L', $2, $3) RETURNING relawan_id`,
-                [userId, alamat_pic || '-', kelurahan_pic || '-']
+                `INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kemantren, kelurahan)
+                 VALUES ($1, 'L', $2, $3, $4) RETURNING relawan_id`,
+                [userId, alamat_pic || '-', kemantren_pic || '-', kelurahan_pic || '-']
             );
             relawanId = relawanRes.rows[0].relawan_id;
         }

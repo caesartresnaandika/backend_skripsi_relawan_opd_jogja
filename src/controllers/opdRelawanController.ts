@@ -45,7 +45,7 @@ export const getRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promi
         const result = await executeQueryWithContext(`
             SELECT 
                 u.user_id, u.nik, u.nama_lengkap, u.no_hp, u.status_keaktifan,
-                r.relawan_id, r.relawan_id AS id, r.jenis_kelamin, r.alamat_ktp, r.kelurahan,
+                r.relawan_id, r.relawan_id AS id, r.jenis_kelamin, r.alamat_ktp, r.kemantren, r.kelurahan,
                 pr.penugasan_id, pr.penugasan, pr.jabatan, pr.detail_jabatan,
                 pr.status_keaktifan AS status_penugasan,
                 pr.opd_id, pr.kader_id, pr.sk_id,
@@ -100,6 +100,7 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
     const nik       = req.body.nik;
     const nama_lengkap  = req.body.nama_lengkap || req.body.namaLengkap || req.body.namaRelawan;
     const alamat_ktp    = req.body.alamat_ktp || req.body.alamat;
+    const kemantren     = req.body.kemantren;
     const kelurahan     = req.body.kelurahan;
     const jenis_kelamin = req.body.jenis_kelamin || req.body.jenisKelamin || 'L';
     const no_hp         = req.body.no_hp || req.body.noHp || null;
@@ -146,9 +147,9 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
         const userId = userRes.rows[0].user_id;
 
         const relawanRes = await client.query(`
-            INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-            VALUES ($1,$2,$3,$4) RETURNING relawan_id
-        `, [userId, jenis_kelamin, alamat_ktp || '-', kelurahan || '-']);
+            INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kemantren, kelurahan)
+            VALUES ($1,$2,$3,$4,$5) RETURNING relawan_id
+        `, [userId, jenis_kelamin, alamat_ktp || '-', kemantren || '-', kelurahan || '-']);
         const relawanId = relawanRes.rows[0].relawan_id;
 
         let kaderId: number | null = null;
@@ -213,6 +214,7 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
             const namaLengkap  = get(['namalengkap', 'nama', 'namarelawan']).trim();
             const jenisKelamin = get(['jeniskelamin', 'jk', 'kelamin']).trim().toUpperCase() === 'P' ? 'P' : 'L';
             const alamat       = get(['alamatktp', 'alamat', 'domisili']).trim() || '-';
+            const kemantren    = get(['kemantren', 'kecamatan']).trim() || '-';
             const kelurahan    = get(['kelurahan', 'desa']).trim() || '-';
             const kaderName    = get(['kader', 'komunitaskader', 'komunitas']).trim();
             const peran        = get(['jabatan', 'peran', 'jabatanperan']).trim() || null;
@@ -263,11 +265,12 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                             UPDATE relawan
                             SET jenis_kelamin = $1,
                                 alamat_ktp   = $2,
-                                kelurahan    = $3,
+                                kemantren    = $3,
+                                kelurahan    = $4,
                                 updated_at   = CURRENT_TIMESTAMP
-                            WHERE relawan_id = $4
+                            WHERE relawan_id = $5
                             RETURNING relawan_id
-                        `, [jenisKelamin, alamat, kelurahan, relawanId]);
+                        `, [jenisKelamin, alamat, kemantren, kelurahan, relawanId]);
 
                         if ((updateR.rowCount ?? 0) > 0) {
                             updatedProfileCount++;
@@ -279,9 +282,9 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                     } else {
                         // User ada tapi relawan belum — buat baru
                         const r = await client.query(`
-                            INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-                            VALUES ($1,$2,$3,$4) RETURNING relawan_id
-                        `, [userId, jenisKelamin, alamat, kelurahan]);
+                            INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kemantren, kelurahan)
+                            VALUES ($1,$2,$3,$4,$5) RETURNING relawan_id
+                        `, [userId, jenisKelamin, alamat, kemantren, kelurahan]);
                         relawanId = r.rows[0].relawan_id;
                         updatedProfileCount++;
                     }
@@ -295,9 +298,9 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                     userId = uRes.rows[0].user_id;
 
                     const rRes = await client.query(`
-                        INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kelurahan)
-                        VALUES ($1,$2,$3,$4) RETURNING relawan_id
-                    `, [userId, jenisKelamin, alamat, kelurahan]);
+                        INSERT INTO relawan (user_id, jenis_kelamin, alamat_ktp, kemantren, kelurahan)
+                        VALUES ($1,$2,$3,$4,$5) RETURNING relawan_id
+                    `, [userId, jenisKelamin, alamat, kemantren, kelurahan]);
                     relawanId = rRes.rows[0].relawan_id;
                 }
 
@@ -387,7 +390,7 @@ export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
         res.status(400).json({ success: false, message: 'ID Relawan tidak valid.' });
         return;
     }
-    const { nama_lengkap, alamat_ktp, kelurahan, jenis_kelamin, assignments } = req.body;
+    const { nama_lengkap, alamat_ktp, kemantren, kelurahan, jenis_kelamin, assignments } = req.body;
 
     const client = await pool.connect();
     try {
@@ -416,9 +419,9 @@ export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
         }
 
         await client.query(`
-            UPDATE relawan SET alamat_ktp = $1, kelurahan = $2, jenis_kelamin = $3, updated_at = CURRENT_TIMESTAMP
-            WHERE relawan_id = $4
-        `, [alamat_ktp, kelurahan, jenis_kelamin, relawanId]);
+            UPDATE relawan SET alamat_ktp = $1, kemantren = $2, kelurahan = $3, jenis_kelamin = $4, updated_at = CURRENT_TIMESTAMP
+            WHERE relawan_id = $5
+        `, [alamat_ktp, kemantren, kelurahan, jenis_kelamin, relawanId]);
 
         if (nama_lengkap) {
             await client.query(`
@@ -578,6 +581,18 @@ export const reviewPengajuanByOpd = async (req: OpdAuthRequest, res: Response): 
                 await client.query(
                     `UPDATE relawan SET alamat_ktp = $1 WHERE relawan_id = $2`,
                     [dataBaru.alamat_ktp, pengajuan.relawan_id]
+                );
+            }
+            if (dataBaru.kemantren) {
+                await client.query(
+                    `UPDATE relawan SET kemantren = $1 WHERE relawan_id = $2`,
+                    [dataBaru.kemantren, pengajuan.relawan_id]
+                );
+            }
+            if (dataBaru.kelurahan) {
+                await client.query(
+                    `UPDATE relawan SET kelurahan = $1 WHERE relawan_id = $2`,
+                    [dataBaru.kelurahan, pengajuan.relawan_id]
                 );
             }
         }

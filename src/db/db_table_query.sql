@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS public.relawan
     kelurahan character varying(100) COLLATE pg_catalog."default",
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    kemantren character varying(100) COLLATE pg_catalog."default",
     CONSTRAINT relawan_pkey PRIMARY KEY (relawan_id),
     CONSTRAINT relawan_user_id_key UNIQUE (user_id)
 );
