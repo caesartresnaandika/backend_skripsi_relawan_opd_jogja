@@ -35,6 +35,7 @@ import kaderRoutes from './src/routes/kaderRoutes';
 import profileRoutes from './src/routes/profileRoutes';
 import statistikRoutes from './src/routes/statistikRoutes';
 import settingsRoutes from './src/routes/settingsRoutes';
+import wilayahRoutes from './src/routes/wilayahRoutes';
 
 dotenv.config();
 
@@ -112,6 +113,9 @@ app.use('/api/statistik', statistikRoutes);
 
 // ⚙️ Settings (pengaturan sistem)
 app.use('/api/settings', settingsRoutes);
+
+// 🗺️ Wilayah (Kemantren & Kelurahan — public lookup)
+app.use('/api/wilayah', wilayahRoutes);
 
 // Test root — untuk cek apakah server hidup
 app.get('/', (req: Request, res: Response) => {
