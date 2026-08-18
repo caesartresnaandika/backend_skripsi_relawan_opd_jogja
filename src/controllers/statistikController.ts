@@ -9,9 +9,9 @@
  *
  * Endpoints:
  * 1. GET /api/statistik/gender → Demografi gender
- * 2. GET /api/statistik/kelurahan → Demografi kelurahan (top 5)
- * 3. GET /api/statistik/relawan-per-kader → Relawan per kader (top 5)
- * 4. GET /api/statistik/kader-per-opd → Kader per OPD (top 5)
+ * 2. GET /api/statistik/kelurahan → Demografi kelurahan (top N)
+ * 3. GET /api/statistik/relawan-per-kader → Relawan per kader (top N)
+ * 4. GET /api/statistik/kader-per-opd → Kader per OPD (top N)
  * ============================================================
  */
 
@@ -54,13 +54,13 @@ export const getStatistikGender = async (req: AuthRequest, res: Response): Promi
 
 /*
  * GET /api/statistik/kelurahan
- * Top 5 kelurahan dengan relawan terbanyak.
- * - Role OPD: scoped ke OPD-nya
- * - Super Admin: global
+ * Top N kelurahan dengan relawan terbanyak.
+ * Query: ?limit=7 (default: 5)
  */
 export const getStatistikKelurahan = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user = req.user!;
+        const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 5, 1), 50);
         let result;
 
         if (user.role === 'opd') {
@@ -75,8 +75,8 @@ export const getStatistikKelurahan = async (req: AuthRequest, res: Response): Pr
                   AND pr.opd_id = $1
                 GROUP BY r.kelurahan
                 ORDER BY jumlah DESC
-                LIMIT 5
-            `, [user.opd_id], user);
+                LIMIT $2
+            `, [user.opd_id, limit], user);
         } else {
             result = await executeQueryWithContext(`
                 SELECT r.kelurahan, COUNT(r.relawan_id) AS jumlah
@@ -87,8 +87,8 @@ export const getStatistikKelurahan = async (req: AuthRequest, res: Response): Pr
                   AND r.kelurahan != '-'
                 GROUP BY r.kelurahan
                 ORDER BY jumlah DESC
-                LIMIT 5
-            `, [], user);
+                LIMIT $1
+            `, [limit], user);
         }
 
         res.status(200).json({ success: true, data: result.rows });
@@ -100,11 +100,13 @@ export const getStatistikKelurahan = async (req: AuthRequest, res: Response): Pr
 
 /*
  * GET /api/statistik/relawan-per-kader
- * Top 5 kader dengan jumlah relawan terbanyak.
+ * Top N kader dengan jumlah relawan terbanyak.
+ * Query: ?limit=8 (default: 5)
  */
 export const getRelawanPerKader = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user = req.user!;
+        const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 5, 1), 50);
         let result;
 
         if (user.role === 'opd') {
@@ -116,8 +118,8 @@ export const getRelawanPerKader = async (req: AuthRequest, res: Response): Promi
                 WHERE k.opd_id = $1
                 GROUP BY k.kader_id, k.nama_kader
                 ORDER BY value DESC
-                LIMIT 5
-            `, [user.opd_id], user);
+                LIMIT $2
+            `, [user.opd_id, limit], user);
         } else {
             result = await executeQueryWithContext(`
                 SELECT k.nama_kader AS name, COUNT(DISTINCT pr.relawan_id) AS value
@@ -126,8 +128,8 @@ export const getRelawanPerKader = async (req: AuthRequest, res: Response): Promi
                     AND pr.status_keaktifan = 'Aktif'
                 GROUP BY k.kader_id, k.nama_kader
                 ORDER BY value DESC
-                LIMIT 5
-            `, [], user);
+                LIMIT $1
+            `, [limit], user);
         }
 
         res.status(200).json({ success: true, data: result.rows });
@@ -139,11 +141,13 @@ export const getRelawanPerKader = async (req: AuthRequest, res: Response): Promi
 
 /*
  * GET /api/statistik/kader-per-opd
- * Top 5 OPD dengan jumlah kader terbanyak.
+ * Top N OPD dengan jumlah kader terbanyak.
+ * Query: ?limit=5 (default: 5)
  */
 export const getKaderPerOPD = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user = req.user!;
+        const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 5, 1), 50);
         let result;
 
         if (user.role === 'opd') {
@@ -153,7 +157,8 @@ export const getKaderPerOPD = async (req: AuthRequest, res: Response): Promise<v
                 LEFT JOIN kader k ON o.opd_id = k.opd_id AND k.status_keaktifan = true
                 WHERE o.opd_id = $1
                 GROUP BY o.opd_id, o.nama_opd
-            `, [user.opd_id], user);
+                LIMIT $2
+            `, [user.opd_id, limit], user);
         } else {
             result = await executeQueryWithContext(`
                 SELECT o.nama_opd AS name, COUNT(k.kader_id) AS value
@@ -162,8 +167,8 @@ export const getKaderPerOPD = async (req: AuthRequest, res: Response): Promise<v
                 WHERE o.status_keaktifan = true
                 GROUP BY o.opd_id, o.nama_opd
                 ORDER BY value DESC
-                LIMIT 5
-            `, [], user);
+                LIMIT $1
+            `, [limit], user);
         }
 
         res.status(200).json({ success: true, data: result.rows });
@@ -171,4 +176,4 @@ export const getKaderPerOPD = async (req: AuthRequest, res: Response): Promise<v
         console.error('Error in getKaderPerOPD:', error);
         res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
     }
-};
+};

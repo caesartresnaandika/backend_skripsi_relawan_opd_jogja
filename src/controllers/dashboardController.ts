@@ -38,7 +38,8 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
             totalKaderRes,
             pengajuanPendingRes,
             relawanPerOpdRes,
-            demografiGenderRes
+            demografiGenderRes,
+            topRelawanRes
         ] = await Promise.all([
             // 1. Total Relawan Aktif
             executeQueryWithContext(`
@@ -81,6 +82,23 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
                 JOIN users u ON r.user_id = u.user_id 
                 WHERE u.status_keaktifan = true
                 GROUP BY jenis_kelamin
+            `, [], req.user),
+
+            // 7. Top 5 Relawan (Leaderboard)
+            executeQueryWithContext(`
+                SELECT 
+                    r.relawan_id,
+                    u.nama_lengkap,
+                    o.nama_opd,
+                    COUNT(pr.penugasan_id) as total_penugasan
+                FROM relawan r
+                JOIN users u ON r.user_id = u.user_id
+                JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
+                LEFT JOIN opd o ON pr.opd_id = o.opd_id
+                WHERE u.status_keaktifan = true
+                GROUP BY r.relawan_id, u.nama_lengkap, o.nama_opd
+                ORDER BY total_penugasan DESC
+                LIMIT 5
             `, [], req.user)
         ]);
 
@@ -95,6 +113,12 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
                     total_kader: parseInt(totalKaderRes.rows[0].total, 10),
                     pengajuan_pending: parseInt(pengajuanPendingRes.rows[0].total, 10)
                 },
+                top_relawan: topRelawanRes.rows.map(row => ({
+                    relawan_id: row.relawan_id,
+                    nama_lengkap: row.nama_lengkap,
+                    nama_opd: row.nama_opd || 'Bappeda',
+                    total_penugasan: parseInt(row.total_penugasan, 10)
+                })),
                 grafik_relawan_per_opd: relawanPerOpdRes.rows.map(row => ({
                     nama_opd: row.nama_opd,
                     jumlah_relawan: parseInt(row.jumlah_relawan, 10)

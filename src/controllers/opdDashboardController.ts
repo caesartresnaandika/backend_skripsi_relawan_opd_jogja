@@ -40,7 +40,8 @@ export const getOpdDashboardStats = async (req: OpdAuthRequest, res: Response): 
             totalSKRes,
             totalKaderRes,
             chartRelawanPerKaderRes,
-            chartStatusPenugasanRes
+            chartStatusPenugasanRes,
+            topRelawanRes
         ] = await Promise.all([
             // 1. Total Relawan Aktif di OPD ini
             executeQueryWithContext(`
@@ -77,6 +78,23 @@ export const getOpdDashboardStats = async (req: OpdAuthRequest, res: Response): 
                 FROM penugasan_relawan
                 WHERE opd_id = $1
                 GROUP BY status_keaktifan
+            `, [opdId], req.user),
+
+            // 6. Top 5 Relawan di OPD ini
+            executeQueryWithContext(`
+                SELECT 
+                    r.relawan_id,
+                    u.nama_lengkap,
+                    k.nama_kader,
+                    COUNT(pr.penugasan_id) as total_penugasan
+                FROM relawan r
+                JOIN users u ON r.user_id = u.user_id
+                JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
+                LEFT JOIN kader k ON pr.kader_id = k.kader_id
+                WHERE pr.opd_id = $1 AND u.status_keaktifan = true
+                GROUP BY r.relawan_id, u.nama_lengkap, k.nama_kader
+                ORDER BY total_penugasan DESC
+                LIMIT 5
             `, [opdId], req.user)
         ]);
 
@@ -92,6 +110,12 @@ export const getOpdDashboardStats = async (req: OpdAuthRequest, res: Response): 
                     total_kader: parseInt(totalKaderRes.rows[0].total, 10),  // ✅ Fix field name
                     pengajuan_pending: 0  // ✅ Tambah field ini (bisa diimplementasi nanti)
                 },
+                top_relawan: topRelawanRes.rows.map(row => ({
+                    relawan_id: row.relawan_id,
+                    nama_lengkap: row.nama_lengkap,
+                    nama_opd: opdInfoRes.rows[0]?.nama_opd || 'OPD',
+                    total_penugasan: parseInt(row.total_penugasan, 10)
+                })),
                 // ✅ FIXED: Ubah nama field agar match dengan frontend
                 grafik_relawan_per_opd: chartRelawanPerKaderRes.rows.map(row => ({
                     nama_opd: row.nama_kader,  // ✅ Untuk OPD, chart adalah per kader

@@ -23,6 +23,24 @@ import { RelawanAuthRequest } from '../middleware/relawanMiddleware';
 export const getMyHistory = async (req: RelawanAuthRequest, res: Response): Promise<void> => {
     try {
         const relawanId = req.relawan_id;
+        const statusFilter = req.query.status as string;
+
+        let pengajuanQuery = `
+            SELECT 
+                pengajuan_id, jenis_perubahan, status_pengajuan, 
+                catatan_relawan, catatan_verifikator,
+                tanggal_pengajuan, tanggal_verifikasi
+            FROM pengajuan_perubahan_data
+            WHERE relawan_id = $1
+        `;
+        const pengajuanParams: any[] = [relawanId];
+
+        if (statusFilter && statusFilter.trim() !== '') {
+            pengajuanQuery += ` AND status_pengajuan = $2`;
+            pengajuanParams.push(statusFilter.trim());
+        }
+
+        pengajuanQuery += ` ORDER BY tanggal_pengajuan DESC`;
 
         // Ambil histori 2 jenis data secara paralel
         const [
@@ -44,15 +62,7 @@ export const getMyHistory = async (req: RelawanAuthRequest, res: Response): Prom
             `, [relawanId], req.user),
 
             // 2. History Status Pengajuan Perubahan Biodata
-            executeQueryWithContext(`
-                SELECT 
-                    pengajuan_id, jenis_perubahan, status_pengajuan, 
-                    catatan_relawan, catatan_verifikator,
-                    tanggal_pengajuan, tanggal_verifikasi
-                FROM pengajuan_perubahan_data
-                WHERE relawan_id = $1
-                ORDER BY tanggal_pengajuan DESC
-            `, [relawanId], req.user)
+            executeQueryWithContext(pengajuanQuery, pengajuanParams, req.user)
         ]);
 
         res.status(200).json({
