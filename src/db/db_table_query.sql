@@ -50,6 +50,27 @@ CREATE TABLE IF NOT EXISTS public.kader
 ALTER TABLE IF EXISTS public.kader
     ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS public.kelurahan
+(
+    id_kelurahan character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    id_kemantren character varying(20) COLLATE pg_catalog."default",
+    nama_kelurahan character varying(100) COLLATE pg_catalog."default" NOT NULL,
+    CONSTRAINT kelurahan_pkey PRIMARY KEY (id_kelurahan)
+);
+
+ALTER TABLE IF EXISTS public.kelurahan
+    ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.kemantren
+(
+    id character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    nama_kemantren character varying(100) COLLATE pg_catalog."default" NOT NULL,
+    CONSTRAINT kemantren_pkey PRIMARY KEY (id)
+);
+
+ALTER TABLE IF EXISTS public.kemantren
+    ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS public.opd
 (
     opd_id serial NOT NULL,
@@ -237,6 +258,13 @@ ALTER TABLE IF EXISTS public.kader
     ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_komunitas_opd
     ON public.kader(opd_id);
+
+
+ALTER TABLE IF EXISTS public.kelurahan
+    ADD CONSTRAINT kelurahan_id_kemantren_fkey FOREIGN KEY (id_kemantren)
+    REFERENCES public.kemantren (id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE CASCADE;
 
 
 ALTER TABLE IF EXISTS public.pengajuan_perubahan_data
