@@ -28,6 +28,7 @@ import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { OpdAuthRequest } from '../middleware/opdMiddleware';
+import { REGEX_PATTERNS, cleanPhoneNumber } from '../utils/regex';
 
 /*
  * === RLS CONTEXT HELPERS ===
@@ -186,8 +187,8 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
         res.status(400).json({ success: false, message: 'Nama Kader tidak boleh lebih dari 100 karakter' });
         return;
     }
-    if (!/^[a-zA-Z\s]+$/.test(nama_kader)) {
-        res.status(400).json({ success: false, message: 'Nama Kader tidak boleh mengandung angka atau karakter spesial' });
+    if (!REGEX_PATTERNS.NAMA_RELAWAN.test(nama_kader)) {
+        res.status(400).json({ success: false, message: 'Nama Kader tidak boleh mengandung angka atau karakter spesial selain tanda baca nama' });
         return;
     }
     if (nama_pic) {
@@ -199,8 +200,19 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
             res.status(400).json({ success: false, message: 'Nama PIC tidak boleh lebih dari 100 karakter' });
             return;
         }
-        if (!/^[a-zA-Z\s]+$/.test(nama_pic)) {
-            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka atau karakter spesial' });
+        if (!REGEX_PATTERNS.NAMA_RELAWAN.test(nama_pic)) {
+            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka atau karakter spesial selain tanda baca nama' });
+            return;
+        }
+    }
+    if (no_hp_pic) {
+        const cleanNoHp = cleanPhoneNumber(no_hp_pic);
+        if (REGEX_PATTERNS.HAS_LETTERS.test(cleanNoHp)) {
+            res.status(400).json({ success: false, message: 'Nomor HP PIC tidak boleh mengandung huruf' });
+            return;
+        }
+        if (!REGEX_PATTERNS.NO_HP.test(cleanNoHp)) {
+            res.status(400).json({ success: false, message: 'Format nomor HP PIC tidak valid (harus diawali 08 atau +628, minimal 9-13 digit angka)' });
             return;
         }
     }
@@ -208,7 +220,7 @@ export const createKader = async (req: AuthRequest, res: Response): Promise<void
         res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
         return;
     }
-    if (!/^\d{16}$/.test(String(nik_pic))) {
+    if (!REGEX_PATTERNS.NIK.test(String(nik_pic))) {
         res.status(400).json({ success: false, message: 'NIK PIC harus terdiri dari tepat 16 digit angka' });
         return;
     }
@@ -312,8 +324,8 @@ export const updateKader = async (req: AuthRequest, res: Response): Promise<void
         res.status(400).json({ success: false, message: 'Nama Kader tidak boleh lebih dari 100 karakter' });
         return;
     }
-    if (!/^[a-zA-Z\s]+$/.test(nama_kader)) {
-        res.status(400).json({ success: false, message: 'Nama Kader tidak boleh mengandung angka atau karakter spesial' });
+    if (!REGEX_PATTERNS.NAMA_RELAWAN.test(nama_kader)) {
+        res.status(400).json({ success: false, message: 'Nama Kader tidak boleh mengandung angka atau karakter spesial selain tanda baca nama' });
         return;
     }
     try {
@@ -482,11 +494,26 @@ export const createBulkKader = async (req: AuthRequest, res: Response): Promise<
                 errors.push(`Baris ${rowNumber}: Nama Kader kosong`);
                 continue;
             }
+            if (!REGEX_PATTERNS.NAMA_RELAWAN.test(namaKader)) {
+                errors.push(`Baris ${rowNumber}: Format Nama Kader "${namaKader}" tidak valid (hanya huruf dan tanda baca nama)`);
+                continue;
+            }
             if (!namaOpd) {
                 errors.push(`Baris ${rowNumber} ("${namaKader}"): OPD kosong`);
                 continue;
             }
-            if (!nikPic || !/^\d{16}$/.test(nikPic)) {
+            if (pic && !REGEX_PATTERNS.NAMA_RELAWAN.test(pic)) {
+                errors.push(`Baris ${rowNumber} ("${namaKader}"): Format Nama PIC "${pic}" tidak valid`);
+                continue;
+            }
+            if (noHpPic) {
+                const cleanNoHp = cleanPhoneNumber(noHpPic);
+                if (!REGEX_PATTERNS.NO_HP.test(cleanNoHp)) {
+                    errors.push(`Baris ${rowNumber} ("${namaKader}"): Format No HP PIC "${noHpPic}" tidak valid`);
+                    continue;
+                }
+            }
+            if (!nikPic || !REGEX_PATTERNS.NIK.test(nikPic)) {
                 errors.push(`Baris ${rowNumber} ("${namaKader}"): NIK PIC harus 16 digit angka (terdeteksi: "${nikPic}")`);
                 continue;
             }
@@ -651,8 +678,8 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
         res.status(400).json({ success: false, message: 'Nama Kader tidak boleh lebih dari 100 karakter' });
         return;
     }
-    if (!/^[a-zA-Z\s]+$/.test(nama_kader)) {
-        res.status(400).json({ success: false, message: 'Nama Kader tidak boleh mengandung angka atau karakter spesial' });
+    if (!REGEX_PATTERNS.NAMA_RELAWAN.test(nama_kader)) {
+        res.status(400).json({ success: false, message: 'Nama Kader tidak boleh mengandung angka atau karakter spesial selain tanda baca nama' });
         return;
     }
     if (nama_pic) {
@@ -664,8 +691,19 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
             res.status(400).json({ success: false, message: 'Nama PIC tidak boleh lebih dari 100 karakter' });
             return;
         }
-        if (!/^[a-zA-Z\s]+$/.test(nama_pic)) {
-            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka atau karakter spesial' });
+        if (!REGEX_PATTERNS.NAMA_RELAWAN.test(nama_pic)) {
+            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka atau karakter spesial selain tanda baca nama' });
+            return;
+        }
+    }
+    if (no_hp_pic) {
+        const cleanNoHp = cleanPhoneNumber(no_hp_pic);
+        if (REGEX_PATTERNS.HAS_LETTERS.test(cleanNoHp)) {
+            res.status(400).json({ success: false, message: 'Nomor HP PIC tidak boleh mengandung huruf' });
+            return;
+        }
+        if (!REGEX_PATTERNS.NO_HP.test(cleanNoHp)) {
+            res.status(400).json({ success: false, message: 'Format nomor HP PIC tidak valid (harus diawali 08 atau +628, minimal 9-13 digit angka)' });
             return;
         }
     }
@@ -673,7 +711,7 @@ export const createKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
         res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
         return;
     }
-    if (!/^\d{16}$/.test(String(nik_pic))) {
+    if (!REGEX_PATTERNS.NIK.test(String(nik_pic))) {
         res.status(400).json({ success: false, message: 'NIK PIC harus terdiri dari tepat 16 digit angka' });
         return;
     }
@@ -769,8 +807,8 @@ export const updateKaderByOpd = async (req: OpdAuthRequest, res: Response): Prom
             res.status(400).json({ success: false, message: 'Nama Kader tidak boleh lebih dari 100 karakter' });
             return;
         }
-        if (!/^[a-zA-Z\s]+$/.test(nama_kader)) {
-            res.status(400).json({ success: false, message: 'Nama Kader tidak boleh mengandung angka atau karakter spesial' });
+        if (!REGEX_PATTERNS.NAMA_RELAWAN.test(nama_kader)) {
+            res.status(400).json({ success: false, message: 'Nama Kader tidak boleh mengandung angka atau karakter spesial selain tanda baca nama' });
             return;
         }
 
@@ -888,7 +926,22 @@ export const createBulkKaderByOpd = async (req: OpdAuthRequest, res: Response): 
                 errors.push(`Baris ${rowNumber}: Nama Kader kosong`);
                 continue;
             }
-            if (!nikPic || !/^\d{16}$/.test(nikPic)) {
+            if (!REGEX_PATTERNS.NAMA_RELAWAN.test(namaKader)) {
+                errors.push(`Baris ${rowNumber}: Format Nama Kader "${namaKader}" tidak valid`);
+                continue;
+            }
+            if (pic && !REGEX_PATTERNS.NAMA_RELAWAN.test(pic)) {
+                errors.push(`Baris ${rowNumber} ("${namaKader}"): Format Nama PIC "${pic}" tidak valid`);
+                continue;
+            }
+            if (noHpPic) {
+                const cleanNoHp = cleanPhoneNumber(noHpPic);
+                if (!REGEX_PATTERNS.NO_HP.test(cleanNoHp)) {
+                    errors.push(`Baris ${rowNumber} ("${namaKader}"): Format No HP PIC "${noHpPic}" tidak valid`);
+                    continue;
+                }
+            }
+            if (!nikPic || !REGEX_PATTERNS.NIK.test(nikPic)) {
                 errors.push(`Baris ${rowNumber} ("${namaKader}"): NIK PIC harus 16 digit angka`);
                 continue;
             }
@@ -1006,12 +1059,23 @@ export const assignPicKader = async (req: AuthRequest, res: Response): Promise<v
             res.status(400).json({ success: false, message: 'Nama PIC tidak boleh lebih dari 100 karakter' });
             return;
         }
-        if (!/^[a-zA-Z\s]+$/.test(nama_pic)) {
-            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka atau karakter spesial' });
+        if (!REGEX_PATTERNS.NAMA_RELAWAN.test(nama_pic)) {
+            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka atau karakter spesial selain tanda baca nama' });
             return;
         }
     }
-    if (!/^\d{16}$/.test(String(nik_pic))) {
+    if (no_hp_pic) {
+        const cleanNoHp = cleanPhoneNumber(no_hp_pic);
+        if (REGEX_PATTERNS.HAS_LETTERS.test(cleanNoHp)) {
+            res.status(400).json({ success: false, message: 'Nomor HP PIC tidak boleh mengandung huruf' });
+            return;
+        }
+        if (!REGEX_PATTERNS.NO_HP.test(cleanNoHp)) {
+            res.status(400).json({ success: false, message: 'Format nomor HP PIC tidak valid (harus diawali 08 atau +628, minimal 9-13 digit angka)' });
+            return;
+        }
+    }
+    if (!REGEX_PATTERNS.NIK.test(String(nik_pic))) {
         res.status(400).json({ success: false, message: 'NIK PIC harus terdiri dari tepat 16 digit angka' });
         return;
     }

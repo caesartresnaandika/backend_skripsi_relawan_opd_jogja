@@ -23,6 +23,7 @@ import { executeQueryWithContext } from '../../config/db';
 import { OpdAuthRequest } from '../middleware/opdMiddleware';
 import pool from '../../config/db';
 import bcrypt from 'bcrypt';
+import { REGEX_PATTERNS, cleanPhoneNumber } from '../utils/regex';
 
 /**
  * Set RLS context pada raw client — dipanggil tepat setelah BEGIN.
@@ -185,7 +186,7 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
         res.status(400).json({ success: false, message: 'NIK dan Nama wajib diisi' });
         return;
     }
-    if (!/^\d{16}$/.test(nik)) {
+    if (!REGEX_PATTERNS.NIK.test(nik)) {
         res.status(400).json({ success: false, message: 'NIK harus terdiri dari tepat 16 digit angka' });
         return;
     }
@@ -193,9 +194,20 @@ export const createRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
         res.status(400).json({ success: false, message: 'Nama Lengkap minimal 3 karakter' });
         return;
     }
-    if (!/^[a-zA-Z\s]+$/.test(nama_lengkap)) {
-        res.status(400).json({ success: false, message: 'Nama Lengkap tidak boleh mengandung angka atau karakter spesial' });
+    if (!REGEX_PATTERNS.NAMA_RELAWAN.test(nama_lengkap)) {
+        res.status(400).json({ success: false, message: 'Nama Lengkap tidak boleh mengandung angka atau karakter spesial selain tanda baca nama' });
         return;
+    }
+    if (no_hp) {
+        const cleanNoHp = cleanPhoneNumber(no_hp);
+        if (REGEX_PATTERNS.HAS_LETTERS.test(cleanNoHp)) {
+            res.status(400).json({ success: false, message: 'Nomor HP tidak boleh mengandung huruf' });
+            return;
+        }
+        if (!REGEX_PATTERNS.NO_HP.test(cleanNoHp)) {
+            res.status(400).json({ success: false, message: 'Format nomor HP tidak valid (harus diawali 08 atau +628, minimal 9-13 digit angka)' });
+            return;
+        }
     }
 
     const client = await pool.connect();
@@ -297,9 +309,20 @@ export const createBulkRelawanByOpd = async (req: OpdAuthRequest, res: Response)
                 errors.push(`Baris ${rowNumber} dilewati: NIK atau Nama kosong/tidak terbaca.`);
                 continue;
             }
-            if (!/^\d{16}$/.test(nik)) {
+            if (!REGEX_PATTERNS.NIK.test(nik)) {
                 errors.push(`Baris ${rowNumber} dilewati: NIK "${nik}" harus 16 digit angka.`);
                 continue;
+            }
+            if (!REGEX_PATTERNS.NAMA_RELAWAN.test(namaLengkap)) {
+                errors.push(`Baris ${rowNumber} dilewati: Format nama "${namaLengkap}" tidak valid.`);
+                continue;
+            }
+            if (noHp) {
+                const cleanNoHp = cleanPhoneNumber(noHp);
+                if (!REGEX_PATTERNS.NO_HP.test(cleanNoHp)) {
+                    errors.push(`Baris ${rowNumber} dilewati: Format nomor HP "${noHp}" tidak valid.`);
+                    continue;
+                }
             }
 
             try {
@@ -470,8 +493,8 @@ export const updateRelawanByOpd = async (req: OpdAuthRequest, res: Response): Pr
                 res.status(400).json({ success: false, message: 'Nama Lengkap minimal 3 karakter' });
                 return;
             }
-            if (!/^[a-zA-Z\s]+$/.test(nama_lengkap)) {
-                res.status(400).json({ success: false, message: 'Nama Lengkap tidak boleh mengandung angka atau karakter spesial' });
+            if (!REGEX_PATTERNS.NAMA_RELAWAN.test(nama_lengkap)) {
+                res.status(400).json({ success: false, message: 'Nama Lengkap tidak boleh mengandung angka atau karakter spesial selain tanda baca nama' });
                 return;
             }
         }

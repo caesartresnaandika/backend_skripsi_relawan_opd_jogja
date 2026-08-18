@@ -18,6 +18,7 @@ import pool from '../../config/db';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import { REGEX_PATTERNS } from '../utils/regex';
 
 dotenv.config();
 
@@ -47,8 +48,17 @@ export const register = async (req: Request, res: Response) => {
     const { nik, nama_lengkap, password, role } = req.body;
     
     // Validasi NIK: harus 16 digit angka sesuai format KTP
-    if (!nik || !/^\d{16}$/.test(nik)) {
+    if (!nik || !REGEX_PATTERNS.NIK.test(nik)) {
         return res.status(400).json({ message: 'NIK harus terdiri dari tepat 16 digit angka' });
+    }
+
+    if (nama_lengkap) {
+        if (nama_lengkap.trim().length < 3) {
+            return res.status(400).json({ message: 'Nama lengkap minimal 3 karakter' });
+        }
+        if (!REGEX_PATTERNS.NAMA_RELAWAN.test(nama_lengkap)) {
+            return res.status(400).json({ message: 'Nama lengkap tidak boleh mengandung angka atau karakter spesial selain tanda baca nama' });
+        }
     }
 
     try {
