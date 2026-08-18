@@ -1,4 +1,19 @@
 "use strict";
+/*
+ * ============================================================
+ * RELAWAN CONTROLLER (LEGACY — VERSI LAMA)
+ * ============================================================
+ * Controller versi awal untuk manajemen relawan.
+ * Masih menggunakan pool.query langsung (tanpa RLS context)
+ * dan tidak menggunakan executeQueryWithContext.
+ *
+ * Sebagian besar fungsionalitas sudah digantikan oleh:
+ * - relawanAdminController.ts (untuk Super Admin)
+ * - opdRelawanController.ts (untuk Admin OPD)
+ *
+ * Masih dipertahankan untuk kompatibilitas dengan fitur lama.
+ * ============================================================
+ */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -14,7 +29,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteRelawan = exports.updateRelawan = exports.getRelawanById = exports.getAllRelawan = void 0;
 const db_1 = __importDefault(require("../../config/db"));
-// 1. AMBIL SEMUA RELAWAN + PENCARIAN (F-05)
+const regex_1 = require("../utils/regex");
+// 1. GET ALL RELAWAN + SEARCH
+// Mendukung pencarian via ?keyword=nama
 const getAllRelawan = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { keyword } = req.query; // Ambil parameter ?keyword=nama
@@ -79,6 +96,17 @@ const updateRelawan = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     try {
         const { id } = req.params;
         const { no_hp, alamat_domisili, status_bpjs_aktif } = req.body;
+        if (no_hp) {
+            const cleanNoHp = (0, regex_1.cleanPhoneNumber)(no_hp);
+            if (regex_1.REGEX_PATTERNS.HAS_LETTERS.test(cleanNoHp)) {
+                res.status(400).json({ success: false, message: 'Nomor HP tidak boleh mengandung huruf' });
+                return;
+            }
+            if (!regex_1.REGEX_PATTERNS.NO_HP.test(cleanNoHp)) {
+                res.status(400).json({ success: false, message: 'Format nomor HP tidak valid (harus diawali 08 atau +628, minimal 9-13 digit angka)' });
+                return;
+            }
+        }
         // Cek dulu apakah data ada
         const check = yield db_1.default.query('SELECT user_id FROM relawan WHERE relawan_id = $1', [id]);
         if (check.rows.length === 0) {

@@ -33,6 +33,11 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+/*
+ * RELAWAN ROUTES — Khusus role relawan
+ * Base URL: /api/relawan
+ * Middleware: verifyToken + authorizeRole('relawan') + requireRelawanContext
+ */
 const express_1 = require("express");
 const authMiddleware_1 = __importStar(require("../middleware/authMiddleware"));
 const relawanMiddleware_1 = require("../middleware/relawanMiddleware");
@@ -40,23 +45,22 @@ const relawanDashboardController_1 = require("../controllers/relawanDashboardCon
 const relawanProfileController_1 = require("../controllers/relawanProfileController");
 const relawanHistoryController_1 = require("../controllers/relawanHistoryController");
 const router = (0, express_1.Router)();
-// Middleware Lapis 1: Cek Token JWT dan pastikan role-nya adalah 'relawan'
+// Lapis 1: Verifikasi token + pastikan role 'relawan'
 router.use(authMiddleware_1.default, (0, authMiddleware_1.authorizeRole)('relawan'));
-// Middleware Lapis 2: Ekstrak relawan_id secara otomatis ke dalam req object
+// Lapis 2: Ambil relawan_id dari database dan attach ke request
 router.use(relawanMiddleware_1.requireRelawanContext);
-// ==========================================
-// Kumpulan Endpoint API Khusus Relawan
-// ==========================================
-// 1. Dashboard Relawan
+// GET  /api/relawan/dashboard — Statistik dashboard relawan
 router.get('/dashboard', relawanDashboardController_1.getRelawanDashboardStats);
-// 2. Profil Biodata
+// GET  /api/relawan/profile — Biodata relawan
 router.get('/profile', relawanProfileController_1.getMyProfile);
+// POST /api/relawan/profile/update — Ajukan perubahan biodata (masuk antrean review)
 router.post('/profile/update', relawanProfileController_1.requestProfileUpdate);
-// 3. Riwayat / History
+// GET /api/relawan/history — Riwayat penugasan & pengajuan
 router.get('/history', relawanHistoryController_1.getMyHistory);
-// 4. Penugasan
+// GET /api/relawan/penugasan — Daftar penugasan aktif
 router.get('/penugasan', relawanProfileController_1.getMyPenugasan);
-// 5. Ubah Password
+// POST /api/relawan/verify-password — Verifikasi password (real-time)
 router.post('/verify-password', relawanProfileController_1.verifyCurrentPassword);
+// POST /api/relawan/change-password — Ganti password
 router.post('/change-password', relawanProfileController_1.changePassword);
 exports.default = router;

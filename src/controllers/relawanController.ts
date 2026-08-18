@@ -16,6 +16,7 @@
 
 import { Request, Response } from 'express';
 import pool from '../../config/db';
+import { REGEX_PATTERNS, cleanPhoneNumber } from '../utils/regex';
 
 // 1. GET ALL RELAWAN + SEARCH
 // Mendukung pencarian via ?keyword=nama
@@ -89,6 +90,18 @@ export const updateRelawan = async (req: Request, res: Response): Promise<void> 
   try {
     const { id } = req.params;
     const { no_hp, alamat_domisili, status_bpjs_aktif } = req.body;
+
+    if (no_hp) {
+      const cleanNoHp = cleanPhoneNumber(no_hp);
+      if (REGEX_PATTERNS.HAS_LETTERS.test(cleanNoHp)) {
+        res.status(400).json({ success: false, message: 'Nomor HP tidak boleh mengandung huruf' });
+        return;
+      }
+      if (!REGEX_PATTERNS.NO_HP.test(cleanNoHp)) {
+        res.status(400).json({ success: false, message: 'Format nomor HP tidak valid (harus diawali 08 atau +628, minimal 9-13 digit angka)' });
+        return;
+      }
+    }
 
     // Cek dulu apakah data ada
     const check = await pool.query('SELECT user_id FROM relawan WHERE relawan_id = $1', [id]);

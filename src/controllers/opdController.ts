@@ -24,6 +24,7 @@ import { Response } from 'express';
 import pool, { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 import bcrypt from 'bcrypt';
+import { REGEX_PATTERNS, cleanPhoneNumber } from '../utils/regex';
 
 /*
  * GET ALL OPD
@@ -132,8 +133,23 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
             res.status(400).json({ success: false, message: 'Nama PIC minimal 3 karakter' });
             return;
         }
-        if (!/^[a-zA-Z\s]+$/.test(nama_pic)) {
-            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka atau karakter spesial' });
+        if (nama_pic.length > 100) {
+            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh lebih dari 100 karakter' });
+            return;
+        }
+        if (!REGEX_PATTERNS.NAMA_RELAWAN.test(nama_pic)) {
+            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka atau karakter spesial selain tanda baca nama' });
+            return;
+        }
+    }
+    if (kontak) {
+        const cleanKontak = cleanPhoneNumber(kontak);
+        if (REGEX_PATTERNS.HAS_LETTERS.test(cleanKontak)) {
+            res.status(400).json({ success: false, message: 'Nomor kontak tidak boleh mengandung huruf' });
+            return;
+        }
+        if (!REGEX_PATTERNS.NO_HP.test(cleanKontak)) {
+            res.status(400).json({ success: false, message: 'Format nomor kontak tidak valid (harus diawali 08 atau +628, minimal 9-13 digit angka)' });
             return;
         }
     }
@@ -141,7 +157,7 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
         res.status(400).json({ success: false, message: 'NIK PIC wajib diisi' });
         return;
     }
-    if (!/^\d{16}$/.test(nik_pic)) {
+    if (!REGEX_PATTERNS.NIK.test(nik_pic)) {
         res.status(400).json({ success: false, message: 'NIK PIC harus terdiri dari tepat 16 digit angka' });
         return;
     }
@@ -233,7 +249,22 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
                 errors.push(`"${namaOpd}": Nama OPD melebihi batas 255 karakter`);
                 continue;
             }
-            if (!nikPic || !/^\d{16}$/.test(nikPic)) {
+            if (!REGEX_PATTERNS.NAMA_OPD.test(namaOpd)) {
+                errors.push(`"${namaOpd}": Nama OPD tidak boleh mengandung angka atau karakter spesial`);
+                continue;
+            }
+            if (pic && !REGEX_PATTERNS.NAMA_RELAWAN.test(pic)) {
+                errors.push(`"${namaOpd}": Format Nama PIC "${pic}" tidak valid (hanya huruf dan tanda baca nama)`);
+                continue;
+            }
+            if (kontak) {
+                const cleanKontak = cleanPhoneNumber(kontak);
+                if (!REGEX_PATTERNS.NO_HP.test(cleanKontak)) {
+                    errors.push(`"${namaOpd}": Format kontak/No HP "${kontak}" tidak valid (harus 08... atau +628...)`);
+                    continue;
+                }
+            }
+            if (!nikPic || !REGEX_PATTERNS.NIK.test(nikPic)) {
                 errors.push(`"${namaOpd}": NIK PIC harus 16 digit angka (diterima: "${nikPic}")`);
                 continue;
             }

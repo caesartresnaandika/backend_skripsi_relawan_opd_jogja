@@ -19,6 +19,7 @@ import { Response } from 'express';
 import { executeQueryWithContext } from '../../config/db';
 import { RelawanAuthRequest } from '../middleware/relawanMiddleware';
 import bcrypt from 'bcrypt';
+import { REGEX_PATTERNS, cleanPhoneNumber } from '../utils/regex';
 
 /*
  * ============================================
@@ -79,6 +80,28 @@ export const requestProfileUpdate = async (req: RelawanAuthRequest, res: Respons
         if (!data_baru) {
             res.status(400).json({ success: false, message: 'Data perubahan wajib disertakan (JSON).' });
             return;
+        }
+
+        if (data_baru.nama_lengkap) {
+            if (data_baru.nama_lengkap.trim().length < 3) {
+                res.status(400).json({ success: false, message: 'Nama Lengkap minimal 3 karakter' });
+                return;
+            }
+            if (!REGEX_PATTERNS.NAMA_RELAWAN.test(data_baru.nama_lengkap)) {
+                res.status(400).json({ success: false, message: 'Nama Lengkap tidak boleh mengandung angka atau karakter spesial selain tanda baca nama' });
+                return;
+            }
+        }
+        if (data_baru.no_hp) {
+            const cleanNoHp = cleanPhoneNumber(data_baru.no_hp);
+            if (REGEX_PATTERNS.HAS_LETTERS.test(cleanNoHp)) {
+                res.status(400).json({ success: false, message: 'Nomor HP tidak boleh mengandung huruf' });
+                return;
+            }
+            if (!REGEX_PATTERNS.NO_HP.test(cleanNoHp)) {
+                res.status(400).json({ success: false, message: 'Format nomor HP tidak valid (harus diawali 08 atau +628, minimal 9-13 digit angka)' });
+                return;
+            }
         }
 
         // Ambil data lama sebagai perbandingan/history
