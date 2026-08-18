@@ -37,30 +37,101 @@ const setClientContext = async (client: any, user: NonNullable<OpdAuthRequest['u
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. GET RELAWAN BY OPD
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. GET RELAWAN BY OPD (Nested Assignments & Filter)
 // Mengambil semua relawan yang memiliki penugasan di OPD ini.
 // ─────────────────────────────────────────────────────────────────────────────
 export const getRelawanByOpd = async (req: OpdAuthRequest, res: Response): Promise<void> => {
     try {
-        const result = await executeQueryWithContext(`
+        const opdId = req.opd_id;
+        const page = parseInt(req.query.page as string) || 1;
+        const limitParam = req.query.limit ? parseInt(req.query.limit as string) : null;
+        const limit = limitParam && limitParam > 0 ? limitParam : null;
+        const offset = limit ? (page - 1) * limit : 0;
+        const search = req.query.q as string;
+        const kaderId = req.query.kader_id as string;
+
+        let whereClause = `WHERE pr.opd_id = $1 AND u.role = 'relawan'`;
+        const values: any[] = [opdId];
+        let paramIndex = 2;
+
+        if (search && search.trim() !== '') {
+            whereClause += ` AND (u.nama_lengkap ILIKE $${paramIndex} OR u.nik ILIKE $${paramIndex} OR u.no_hp ILIKE $${paramIndex})`;
+            values.push(`%${search.trim()}%`);
+            paramIndex++;
+        }
+
+        if (kaderId && !isNaN(parseInt(kaderId, 10))) {
+            whereClause += ` AND pr.kader_id = $${paramIndex}`;
+            values.push(parseInt(kaderId, 10));
+            paramIndex++;
+        }
+
+        const countQuery = `
+            SELECT COUNT(DISTINCT r.relawan_id) as total
+            FROM users u
+            JOIN relawan r ON u.user_id = r.user_id
+            JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
+            ${whereClause}
+        `;
+        const countResult = await executeQueryWithContext(countQuery, values, req.user);
+        const totalRecords = parseInt(countResult.rows[0]?.total || '0', 10);
+        const totalPages = limit ? Math.ceil(totalRecords / limit) : 1;
+
+        let mainQuery = `
             SELECT 
                 u.user_id, u.nik, u.nama_lengkap, u.no_hp, u.status_keaktifan,
                 r.relawan_id, r.relawan_id AS id, r.jenis_kelamin, r.alamat_ktp, r.kemantren, r.kelurahan,
-                pr.penugasan_id, pr.penugasan, pr.jabatan, pr.detail_jabatan,
-                pr.status_keaktifan AS status_penugasan,
-                pr.opd_id, pr.kader_id, pr.sk_id,
-                o.nama_opd, k.nama_kader,
-                sk.nomor_sk, sk.tanggal_terbit, sk.batas_aktif
-            FROM penugasan_relawan pr
-            JOIN relawan r ON pr.relawan_id = r.relawan_id
-            JOIN users u ON r.user_id = u.user_id
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'penugasan_id', pr.penugasan_id,
+                            'penugasan', pr.penugasan,
+                            'jabatan', pr.jabatan,
+                            'detail_jabatan', pr.detail_jabatan,
+                            'status_penugasan', pr.status_keaktifan,
+                            'status_keaktifan', pr.status_keaktifan,
+                            'opd_id', pr.opd_id,
+                            'nama_opd', o.nama_opd,
+                            'kader_id', pr.kader_id,
+                            'nama_kader', k.nama_kader,
+                            'sk_id', pr.sk_id,
+                            'nomor_sk', sk.nomor_sk,
+                            'tanggal_terbit', sk.tanggal_terbit,
+                            'batas_aktif', sk.batas_aktif
+                        ) ORDER BY pr.penugasan_id DESC
+                    ) FILTER (WHERE pr.penugasan_id IS NOT NULL), '[]'
+                ) AS assignments
+            FROM users u
+            JOIN relawan r ON u.user_id = r.user_id
+            JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
             JOIN opd o ON pr.opd_id = o.opd_id
             LEFT JOIN kader k ON pr.kader_id = k.kader_id
             LEFT JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id
-            WHERE pr.opd_id = $1
+            ${whereClause}
+            GROUP BY u.user_id, r.relawan_id
             ORDER BY u.nama_lengkap ASC
-        `, [req.opd_id], req.user);
-        res.status(200).json({ success: true, data: result.rows });
+        `;
+
+        if (limit) {
+            mainQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+            values.push(limit, offset);
+        }
+
+        const result = await executeQueryWithContext(mainQuery, values, req.user);
+        res.status(200).json({
+            success: true,
+            message: 'Berhasil mengambil daftar relawan OPD',
+            data: result.rows,
+            pagination: {
+                total_records: totalRecords,
+                total_pages: totalPages,
+                current_page: page,
+                limit_per_page: limit || totalRecords,
+                has_next_page: limit ? page < totalPages : false,
+                has_prev_page: page > 1
+            }
+        });
     } catch (error: any) {
         console.error('Error in getRelawanByOpd:', error);
         res.status(500).json({ success: false, message: 'Server error' });

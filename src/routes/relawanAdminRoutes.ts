@@ -10,6 +10,7 @@ import { Router } from 'express';
 import verifyToken, { authorizeRole } from '../middleware/authMiddleware';
 import { 
     getAllRelawan, 
+    getRelawanFilterOptions,
     getRelawanById, 
     getPengajuanPerubahanDaftar, 
     reviewPengajuan,
@@ -27,6 +28,10 @@ router.use(verifyToken, authorizeRole('super_admin'));
 
 // GET  /api/admin/relawan — Daftar semua relawan
 router.get('/', getAllRelawan);
+
+// GET  /api/admin/relawan/filter-options — Opsi dropdown filter relawan (kemantren, kelurahan, opd, kader)
+// ⚠️ HARUS DI ATAS /:id agar tidak bentrok!
+router.get('/filter-options', getRelawanFilterOptions);
 
 // POST /api/admin/relawan — Tambah relawan manual
 router.post('/', createRelawan);

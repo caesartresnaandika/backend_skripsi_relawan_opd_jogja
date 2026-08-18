@@ -6,8 +6,9 @@
  *
  * Fitur:
  * 1. CREATE (POST /api/saran): Semua user yang login bisa kirim saran
- * 2. GET ALL (GET /api/saran/admin): Super Admin lihat semua saran
- * 3. UPDATE STATUS (PATCH /api/saran/admin/:id/baca): Admin tandai selesai
+ * 2. GET MY SARAN (GET /api/saran/me): User lihat riwayat sarannya sendiri
+ * 3. GET ALL (GET /api/saran/admin): Super Admin lihat semua saran (search + filter)
+ * 4. UPDATE STATUS (PATCH /api/saran/admin/:id/baca): Admin tandai selesai
  *
  * Status saran: 'Menunggu' (default) atau 'Selesai'
  * ============================================================
@@ -18,10 +19,49 @@ import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 
 /**
+ * GET MY SARAN (Semua role login)
+ * Mengambil riwayat saran masukan milik user yang sedang login saja.
+ * Endpoint: GET /api/saran/me
+ */
+export const getMySaran = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            res.status(401).json({ success: false, message: 'User tidak terautentikasi' });
+            return;
+        }
+
+        const query = `
+            SELECT 
+                saran_id,
+                subjek,
+                pesan,
+                status_keaktifan,
+                catatan_admin,
+                created_at,
+                updated_at
+            FROM saran_masukan
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+        `;
+        const result = await executeQueryWithContext(query, [userId], req.user);
+
+        res.status(200).json({
+            success: true,
+            message: 'Berhasil mengambil riwayat saran saya',
+            data: result.rows
+        });
+    } catch (error: any) {
+        console.error('Error in getMySaran:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server saat membaca saran' });
+    }
+};
+
+/**
  * GET ALL SARAN (Admin only)
- * Mengambil semua saran masukan dengan pagination dan filter status.
+ * Mengambil semua saran masukan dengan pagination, filter status, dan search teks.
  * Endpoint: GET /api/saran/admin
- * Query: ?page=1&limit=10&status=Menunggu|Selesai
+ * Query: ?page=1&limit=10&status=Menunggu|Selesai&q=
  */
 export const getAllSaran = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -29,6 +69,7 @@ export const getAllSaran = async (req: AuthRequest, res: Response): Promise<void
         const limit = parseInt(req.query.limit as string) || 10;
         const offset = (page - 1) * limit;
         const statusFilter = req.query.status as string; // 'Menunggu' atau 'Selesai'
+        const search = req.query.q as string;
 
         let baseQuery = `
             SELECT 
@@ -52,6 +93,12 @@ export const getAllSaran = async (req: AuthRequest, res: Response): Promise<void
         if (statusFilter && ['Menunggu', 'Selesai'].includes(statusFilter)) {
             baseQuery += ` AND sm.status_keaktifan = $${paramIndex}`;
             values.push(statusFilter);
+            paramIndex++;
+        }
+
+        if (search && search.trim() !== '') {
+            baseQuery += ` AND (sm.pesan ILIKE $${paramIndex} OR sm.subjek ILIKE $${paramIndex} OR u.nama_lengkap ILIKE $${paramIndex} OR u.no_hp ILIKE $${paramIndex})`;
+            values.push(`%${search.trim()}%`);
             paramIndex++;
         }
 
@@ -100,7 +147,7 @@ export const createSaran = async (req: AuthRequest, res: Response): Promise<void
         const { subjek, pesan } = req.body;
         const userId = req.user?.id;
 
-        if (!pesan) {
+        if (!pesan || typeof pesan !== 'string' || pesan.trim() === '') {
             res.status(400).json({ success: false, message: 'Field "pesan" wajib diisi' });
             return;
         }
@@ -110,12 +157,16 @@ export const createSaran = async (req: AuthRequest, res: Response): Promise<void
             return;
         }
 
+        const resolvedSubjek = subjek && subjek.trim() !== ''
+            ? subjek.trim()
+            : `Saran dari ${(req.user as any)?.nama_lengkap || req.user?.role || 'Pengguna'}`;
+
         const query = `
             INSERT INTO saran_masukan (user_id, subjek, pesan, status_keaktifan)
             VALUES ($1, $2, $3, 'Menunggu')
             RETURNING saran_id, subjek, pesan, status_keaktifan, created_at
         `;
-        const result = await executeQueryWithContext(query, [userId, subjek || null, pesan], req.user);
+        const result = await executeQueryWithContext(query, [userId, resolvedSubjek, pesan.trim()], req.user);
 
         res.status(201).json({
             success: true,
@@ -132,7 +183,7 @@ export const createSaran = async (req: AuthRequest, res: Response): Promise<void
 /**
  * PATCH /api/saran/admin/:id/baca
  * Update status saran + opsional tambah catatan admin. Hanya untuk Super Admin.
- * Body: { status: 'Menunggu' | 'Selesai', catatan_admin?: string }
+ * Body: { status_keaktifan: 'Menunggu' | 'Selesai', catatan_admin?: string }
  */
 export const updateStatusBaca = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -173,4 +224,4 @@ export const updateStatusBaca = async (req: AuthRequest, res: Response): Promise
         console.error('Error in updateStatusBaca:', error);
         res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server' });
     }
-};
+};

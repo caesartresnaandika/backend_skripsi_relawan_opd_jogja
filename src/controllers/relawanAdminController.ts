@@ -40,32 +40,159 @@ const setClientContext = async (client: any, user: NonNullable<AuthRequest['user
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. GET ALL RELAWAN
+// 1. GET ALL RELAWAN (Nested Response, Search, Filter & Pagination)
 // ─────────────────────────────────────────────────────────────────────────────
 export const getAllRelawan = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const result = await executeQueryWithContext(`
+        const page = parseInt(req.query.page as string) || 1;
+        const limitParam = req.query.limit ? parseInt(req.query.limit as string) : null;
+        const limit = limitParam && limitParam > 0 ? limitParam : null;
+        const offset = limit ? (page - 1) * limit : 0;
+
+        const search = req.query.q as string;
+        const kemantren = req.query.kemantren as string;
+        const kelurahan = req.query.kelurahan as string;
+        const opdId = req.query.opd_id as string;
+        const kaderId = req.query.kader_id as string;
+        const sort = (req.query.sort as string) || 'created_at';
+        const order = ((req.query.order as string) || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+        let whereClause = `WHERE u.role = 'relawan'`;
+        const values: any[] = [];
+        let paramIndex = 1;
+
+        if (search && search.trim() !== '') {
+            whereClause += ` AND (u.nama_lengkap ILIKE $${paramIndex} OR u.nik ILIKE $${paramIndex} OR u.no_hp ILIKE $${paramIndex})`;
+            values.push(`%${search.trim()}%`);
+            paramIndex++;
+        }
+
+        if (kemantren && kemantren.trim() !== '') {
+            whereClause += ` AND r.kemantren ILIKE $${paramIndex}`;
+            values.push(kemantren.trim());
+            paramIndex++;
+        }
+
+        if (kelurahan && kelurahan.trim() !== '') {
+            whereClause += ` AND r.kelurahan ILIKE $${paramIndex}`;
+            values.push(kelurahan.trim());
+            paramIndex++;
+        }
+
+        if (opdId && !isNaN(parseInt(opdId, 10))) {
+            whereClause += ` AND EXISTS (SELECT 1 FROM penugasan_relawan p_sub WHERE p_sub.relawan_id = r.relawan_id AND p_sub.opd_id = $${paramIndex})`;
+            values.push(parseInt(opdId, 10));
+            paramIndex++;
+        }
+
+        if (kaderId && !isNaN(parseInt(kaderId, 10))) {
+            whereClause += ` AND EXISTS (SELECT 1 FROM penugasan_relawan p_sub WHERE p_sub.relawan_id = r.relawan_id AND p_sub.kader_id = $${paramIndex})`;
+            values.push(parseInt(kaderId, 10));
+            paramIndex++;
+        }
+
+        // Tentukan kolom sort aman
+        let sortColumn = 'u.created_at';
+        if (sort === 'nama' || sort === 'nama_lengkap') sortColumn = 'u.nama_lengkap';
+        else if (sort === 'nik') sortColumn = 'u.nik';
+        else if (sort === 'kemantren') sortColumn = 'r.kemantren';
+        else if (sort === 'kelurahan') sortColumn = 'r.kelurahan';
+
+        // Hitung total relawan unik untuk pagination
+        const countQuery = `
+            SELECT COUNT(DISTINCT r.relawan_id) as total
+            FROM users u
+            JOIN relawan r ON u.user_id = r.user_id
+            ${whereClause}
+        `;
+        const countResult = await executeQueryWithContext(countQuery, values, req.user);
+        const totalRecords = parseInt(countResult.rows[0]?.total || '0', 10);
+        const totalPages = limit ? Math.ceil(totalRecords / limit) : 1;
+
+        // Query utama dengan aggregasi nested JSON penugasan
+        let mainQuery = `
             SELECT 
                 u.user_id, u.nik, u.nama_lengkap, u.no_hp, u.status_keaktifan,
                 r.relawan_id, r.relawan_id AS id, r.jenis_kelamin, r.alamat_ktp, r.kemantren, r.kelurahan,
-                pr.penugasan_id, pr.penugasan, pr.jabatan, pr.detail_jabatan,
-                pr.status_keaktifan AS status_penugasan,
-                pr.opd_id, pr.kader_id, pr.sk_id,
-                o.nama_opd, k.nama_kader,
-                sk.nomor_sk, sk.tanggal_terbit, sk.batas_aktif
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'penugasan_id', pr.penugasan_id,
+                            'penugasan', pr.penugasan,
+                            'jabatan', pr.jabatan,
+                            'detail_jabatan', pr.detail_jabatan,
+                            'status_penugasan', pr.status_keaktifan,
+                            'status_keaktifan', pr.status_keaktifan,
+                            'opd_id', pr.opd_id,
+                            'nama_opd', o.nama_opd,
+                            'kader_id', pr.kader_id,
+                            'nama_kader', k.nama_kader,
+                            'sk_id', pr.sk_id,
+                            'nomor_sk', sk.nomor_sk,
+                            'tanggal_terbit', sk.tanggal_terbit,
+                            'batas_aktif', sk.batas_aktif
+                        ) ORDER BY pr.penugasan_id DESC
+                    ) FILTER (WHERE pr.penugasan_id IS NOT NULL), '[]'
+                ) AS assignments
             FROM users u
             JOIN relawan r ON u.user_id = r.user_id
             LEFT JOIN penugasan_relawan pr ON r.relawan_id = pr.relawan_id
             LEFT JOIN opd o ON pr.opd_id = o.opd_id
             LEFT JOIN kader k ON pr.kader_id = k.kader_id
             LEFT JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id
-            WHERE u.role = 'relawan'
-            ORDER BY u.created_at DESC
-        `, [], req.user);
-        res.status(200).json({ success: true, message: 'Berhasil mengambil daftar relawan', data: result.rows });
+            ${whereClause}
+            GROUP BY u.user_id, r.relawan_id
+            ORDER BY ${sortColumn} ${order}
+        `;
+
+        if (limit) {
+            mainQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+            values.push(limit, offset);
+        }
+
+        const result = await executeQueryWithContext(mainQuery, values, req.user);
+
+        res.status(200).json({
+            success: true,
+            message: 'Berhasil mengambil daftar relawan',
+            data: result.rows,
+            pagination: {
+                total_records: totalRecords,
+                total_pages: totalPages,
+                current_page: page,
+                limit_per_page: limit || totalRecords,
+                has_next_page: limit ? page < totalPages : false,
+                has_prev_page: page > 1
+            }
+        });
     } catch (error: any) {
         console.error('Error in getAllRelawan:', error);
         res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1b. GET RELAWAN FILTER OPTIONS (Metadata Dropdown Filter)
+// ─────────────────────────────────────────────────────────────────────────────
+export const getRelawanFilterOptions = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const query = `
+            SELECT json_build_object(
+                'kemantren', (SELECT COALESCE(json_agg(DISTINCT kemantren) FILTER (WHERE kemantren IS NOT NULL AND kemantren != '-' AND kemantren != ''), '[]') FROM relawan),
+                'kelurahan', (SELECT COALESCE(json_agg(DISTINCT kelurahan) FILTER (WHERE kelurahan IS NOT NULL AND kelurahan != '-' AND kelurahan != ''), '[]') FROM relawan),
+                'opd', (SELECT COALESCE(json_agg(json_build_object('opd_id', opd_id, 'nama_opd', nama_opd) ORDER BY nama_opd), '[]') FROM opd WHERE status_keaktifan = true),
+                'kader', (SELECT COALESCE(json_agg(json_build_object('kader_id', kader_id, 'nama_kader', nama_kader, 'opd_id', opd_id) ORDER BY nama_kader), '[]') FROM kader WHERE status_keaktifan = true)
+            ) AS filter_options;
+        `;
+        const result = await executeQueryWithContext(query, [], req.user);
+        res.status(200).json({
+            success: true,
+            message: 'Berhasil mengambil opsi filter relawan',
+            data: result.rows[0]?.filter_options || { kemantren: [], kelurahan: [], opd: [], kader: [] }
+        });
+    } catch (error: any) {
+        console.error('Error in getRelawanFilterOptions:', error);
+        res.status(500).json({ success: false, message: 'Gagal memuat opsi filter' });
     }
 };
 
@@ -90,7 +217,7 @@ export const getRelawanById = async (req: AuthRequest, res: Response): Promise<v
             LEFT JOIN opd o ON pr.opd_id = o.opd_id
             LEFT JOIN kader k ON pr.kader_id = k.kader_id
             LEFT JOIN surat_keputusan sk ON pr.sk_id = sk.sk_id
-            WHERE u.user_id = $1 AND u.role = 'relawan'
+            WHERE (u.user_id = $1 OR r.relawan_id = $1) AND u.role = 'relawan'
         `, [id], req.user);
 
         if (result.rows.length === 0) {
@@ -140,11 +267,45 @@ export const getRelawanById = async (req: AuthRequest, res: Response): Promise<v
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. GET PENGAJUAN PERUBAHAN DATA (Antrian Review)
+// 3. GET PENGAJUAN PERUBAHAN DATA (Antrian Review Prioritas)
 // ─────────────────────────────────────────────────────────────────────────────
 export const getPengajuanPerubahanDaftar = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const result = await executeQueryWithContext(`
+        const page = parseInt(req.query.page as string) || 1;
+        const limitParam = req.query.limit ? parseInt(req.query.limit as string) : null;
+        const limit = limitParam && limitParam > 0 ? limitParam : null;
+        const offset = limit ? (page - 1) * limit : 0;
+        const statusFilter = req.query.status as string;
+        const search = req.query.q as string;
+
+        let whereClause = `WHERE 1=1`;
+        const values: any[] = [];
+        let paramIndex = 1;
+
+        if (statusFilter && statusFilter.trim() !== '') {
+            whereClause += ` AND pp.status_pengajuan = $${paramIndex}`;
+            values.push(statusFilter.trim());
+            paramIndex++;
+        }
+
+        if (search && search.trim() !== '') {
+            whereClause += ` AND (u.nama_lengkap ILIKE $${paramIndex} OR u.nik ILIKE $${paramIndex} OR pp.jenis_perubahan ILIKE $${paramIndex})`;
+            values.push(`%${search.trim()}%`);
+            paramIndex++;
+        }
+
+        const countQuery = `
+            SELECT COUNT(*) as total
+            FROM pengajuan_perubahan_data pp
+            JOIN relawan r ON pp.relawan_id = r.relawan_id
+            JOIN users u ON r.user_id = u.user_id
+            ${whereClause}
+        `;
+        const countResult = await executeQueryWithContext(countQuery, values, req.user);
+        const totalRecords = parseInt(countResult.rows[0]?.total || '0', 10);
+        const totalPages = limit ? Math.ceil(totalRecords / limit) : 1;
+
+        let query = `
             SELECT 
                 pp.pengajuan_id, pp.jenis_perubahan, pp.status_pengajuan, pp.tanggal_pengajuan,
                 pp.catatan_relawan, pp.data_baru, pp.data_lama,
@@ -152,9 +313,31 @@ export const getPengajuanPerubahanDaftar = async (req: AuthRequest, res: Respons
             FROM pengajuan_perubahan_data pp
             JOIN relawan r ON pp.relawan_id = r.relawan_id
             JOIN users u ON r.user_id = u.user_id
-            ORDER BY pp.tanggal_pengajuan DESC
-        `, [], req.user);
-        res.status(200).json({ success: true, message: 'Berhasil mengambil antrian pengajuan', data: result.rows });
+            ${whereClause}
+            ORDER BY 
+                CASE WHEN pp.status_pengajuan = 'Menunggu Review' THEN 0 ELSE 1 END,
+                pp.tanggal_pengajuan DESC
+        `;
+
+        if (limit) {
+            query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+            values.push(limit, offset);
+        }
+
+        const result = await executeQueryWithContext(query, values, req.user);
+        res.status(200).json({
+            success: true,
+            message: 'Berhasil mengambil antrian pengajuan',
+            data: result.rows,
+            pagination: {
+                total_records: totalRecords,
+                total_pages: totalPages,
+                current_page: page,
+                limit_per_page: limit || totalRecords,
+                has_next_page: limit ? page < totalPages : false,
+                has_prev_page: page > 1
+            }
+        });
     } catch (error: any) {
         console.error('Error in getPengajuanPerubahanDaftar:', error);
         res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });

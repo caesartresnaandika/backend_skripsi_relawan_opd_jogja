@@ -11,10 +11,9 @@
  * - Filter by action_type (INSERT, UPDATE, DELETE)
  * - Filter by date range (start_date, end_date)
  * - Filter by user_id
+ * - Search by text (q)
+ * - Detail Log / Diff viewer (GET by ID)
  * - Sorting: terbaru ke terlama
- *
- * Query dibangun secara dinamis menggunakan parameter binding
- * untuk mencegah SQL injection.
  * ============================================================
  */
 
@@ -23,9 +22,9 @@ import { executeQueryWithContext } from '../../config/db';
 import { AuthRequest } from '../middleware/authMiddleware';
 
 /*
- * GET AUDIT LOGS
- * Mengambil log aktivitas dengan filter dan pagination.
- * Query dibangun dinamis: filter ditambahkan hanya jika parameter ada.
+ * GET AUDIT LOGS (List View)
+ * Mengambil log aktivitas dengan filter, search teks, dan pagination.
+ * Menghindari pengiriman diff data masif untuk efisiensi & privasi list view.
  */
 export const getAuditLogs = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -38,14 +37,15 @@ export const getAuditLogs = async (req: AuthRequest, res: Response): Promise<voi
         const startDate = req.query.start_date as string;   // format: YYYY-MM-DD
         const endDate = req.query.end_date as string;       // format: YYYY-MM-DD
         const userId = req.query.user_id as string;         // Filter by specific user
+        const search = req.query.q as string;               // Search query (nama, table, action)
 
         // 2. Siapkan Query Dasar & Parameter
         // Kita JOIN dengan tabel users agar frontend langsung dapat nama pelakunya
         let baseQuery = `
             SELECT 
                 al.log_id, al.action_type, al.table_name, al.record_id, 
-                al.old_value, al.new_value, al.ip_address, al.timestamp,
-                u.nama_lengkap as nama_pengguna, u.role as role_pengguna, u.nik
+                al.ip_address, al.timestamp,
+                u.nama_lengkap as nama_pengguna, u.role as role_pengguna
             FROM audit_logs al
             LEFT JOIN users u ON al.user_id = u.user_id
             WHERE 1=1
@@ -67,16 +67,20 @@ export const getAuditLogs = async (req: AuthRequest, res: Response): Promise<voi
         }
 
         if (startDate) {
-            // Berlaku dari awal hari (00:00:00)
             baseQuery += ` AND al.timestamp >= $${paramIndex}::timestamp`;
             values.push(`${startDate} 00:00:00`);
             paramIndex++;
         }
 
         if (endDate) {
-            // Sampai akhir hari (23:59:59)
             baseQuery += ` AND al.timestamp <= $${paramIndex}::timestamp`;
             values.push(`${endDate} 23:59:59`);
+            paramIndex++;
+        }
+
+        if (search && search.trim() !== '') {
+            baseQuery += ` AND (u.nama_lengkap ILIKE $${paramIndex} OR al.table_name ILIKE $${paramIndex} OR al.action_type ILIKE $${paramIndex})`;
+            values.push(`%${search.trim()}%`);
             paramIndex++;
         }
 
@@ -116,3 +120,41 @@ export const getAuditLogs = async (req: AuthRequest, res: Response): Promise<voi
         res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server saat membaca logs' });
     }
 };
+
+/*
+ * GET AUDIT LOG BY ID (Detail View / Diff Modal)
+ * Mengambil detail log lengkap beserta old_value dan new_value.
+ * Endpoint: GET /api/admin/logs/:id
+ */
+export const getAuditLogById = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+
+        const query = `
+            SELECT 
+                al.log_id, al.action_type, al.table_name, al.record_id, 
+                al.old_value, al.new_value, al.ip_address, al.timestamp,
+                u.user_id, u.nama_lengkap as nama_pengguna, u.role as role_pengguna, u.nik, u.no_hp
+            FROM audit_logs al
+            LEFT JOIN users u ON al.user_id = u.user_id
+            WHERE al.log_id = $1
+        `;
+        const result = await executeQueryWithContext(query, [id], req.user);
+
+        if (result.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Detail log tidak ditemukan' });
+            return;
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Berhasil mengambil detail log aktivitas',
+            data: result.rows[0]
+        });
+
+    } catch (error: any) {
+        console.error('Error in getAuditLogById:', error);
+        res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server saat mengambil detail log' });
+    }
+};
+

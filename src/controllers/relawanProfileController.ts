@@ -126,7 +126,7 @@ export const getMyPenugasan = async (req: RelawanAuthRequest, res: Response): Pr
                 pr.penugasan_id, pr.jabatan, pr.detail_jabatan, 
                 pr.status_keaktifan,
                 o.nama_opd, k.nama_kader,
-                sk.nomor_sk
+                sk.nomor_sk, sk.tanggal_terbit, sk.batas_aktif
             FROM penugasan_relawan pr
             JOIN opd o ON pr.opd_id = o.opd_id
             LEFT JOIN kader k ON pr.kader_id = k.kader_id
@@ -135,7 +135,17 @@ export const getMyPenugasan = async (req: RelawanAuthRequest, res: Response): Pr
             ORDER BY pr.created_at DESC
         `, [req.relawan_id], req.user);
 
-        res.status(200).json({ success: true, data: result.rows });
+        const totalPenugasan = result.rows.length;
+        const penugasanAktif = result.rows.filter(r => r.status_keaktifan === 'Aktif').length;
+
+        res.status(200).json({ 
+            success: true, 
+            data: result.rows,
+            summary: {
+                total_penugasan: totalPenugasan,
+                penugasan_aktif: penugasanAktif
+            }
+        });
     } catch (error: any) {
         console.error('Error in getMyPenugasan:', error);
         res.status(500).json({ success: false, message: 'Server error' });
