@@ -308,12 +308,16 @@ export const getPengajuanPerubahanDaftar = async (req: AuthRequest, res: Respons
 
         let query = `
             SELECT 
-                pp.pengajuan_id, pp.jenis_perubahan, pp.status_pengajuan, pp.tanggal_pengajuan,
-                pp.catatan_relawan, pp.data_baru, pp.data_lama,
-                u.nama_lengkap, u.nik, r.relawan_id
+                pp.pengajuan_id, pp.relawan_id, pp.jenis_perubahan, pp.status_pengajuan, 
+                pp.catatan_relawan, pp.catatan_verifikator, pp.data_baru, pp.data_lama,
+                pp.tanggal_pengajuan, pp.tanggal_verifikasi, pp.verifikator_id,
+                u.nama_lengkap, u.nik,
+                uv.nama_lengkap AS nama_verifikator,
+                uv.role AS role_verifikator
             FROM pengajuan_perubahan_data pp
             JOIN relawan r ON pp.relawan_id = r.relawan_id
             JOIN users u ON r.user_id = u.user_id
+            LEFT JOIN users uv ON pp.verifikator_id = uv.user_id
             ${whereClause}
             ORDER BY 
                 CASE WHEN pp.status_pengajuan = 'Menunggu Review' THEN 0 ELSE 1 END,

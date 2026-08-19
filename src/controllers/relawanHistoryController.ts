@@ -27,20 +27,23 @@ export const getMyHistory = async (req: RelawanAuthRequest, res: Response): Prom
 
         let pengajuanQuery = `
             SELECT 
-                pengajuan_id, jenis_perubahan, status_pengajuan, 
-                catatan_relawan, catatan_verifikator,
-                tanggal_pengajuan, tanggal_verifikasi
-            FROM pengajuan_perubahan_data
-            WHERE relawan_id = $1
+                pp.pengajuan_id, pp.jenis_perubahan, pp.status_pengajuan, 
+                pp.catatan_relawan, pp.catatan_verifikator,
+                pp.tanggal_pengajuan, pp.tanggal_verifikasi, pp.verifikator_id,
+                uv.nama_lengkap AS nama_verifikator,
+                uv.role AS role_verifikator
+            FROM pengajuan_perubahan_data pp
+            LEFT JOIN users uv ON pp.verifikator_id = uv.user_id
+            WHERE pp.relawan_id = $1
         `;
         const pengajuanParams: any[] = [relawanId];
 
         if (statusFilter && statusFilter.trim() !== '') {
-            pengajuanQuery += ` AND status_pengajuan = $2`;
+            pengajuanQuery += ` AND pp.status_pengajuan = $2`;
             pengajuanParams.push(statusFilter.trim());
         }
 
-        pengajuanQuery += ` ORDER BY tanggal_pengajuan DESC`;
+        pengajuanQuery += ` ORDER BY pp.tanggal_pengajuan DESC`;
 
         // Ambil histori 2 jenis data secara paralel
         const [
