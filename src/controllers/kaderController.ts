@@ -75,39 +75,45 @@ export const getAllKader = async (req: AuthRequest, res: Response): Promise<void
         let params: any[];
         if (opd_id) {
             query = `
-                SELECT
-                    k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
-                    k.status_keaktifan, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
-                    u.nama_lengkap AS pic_nama,
-                    u.nik          AS pic_nik,
-                    u.no_hp        AS pic_no_hp,
-                    pk.relawan_id  AS pic_relawan_id,
-                    pk.tanggal_mulai AS pic_tanggal_mulai
-                FROM kader k
-                JOIN opd o ON k.opd_id = o.opd_id
-                LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status_keaktifan = 'Aktif'
-                LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
-                LEFT JOIN users u    ON r.user_id = u.user_id
-                WHERE k.opd_id = $1
-                ORDER BY k.created_at DESC;
+                SELECT * FROM (
+                    SELECT DISTINCT ON (k.kader_id)
+                        k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
+                        k.status_keaktifan, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
+                        u.nama_lengkap AS pic_nama,
+                        u.nik          AS pic_nik,
+                        u.no_hp        AS pic_no_hp,
+                        pk.relawan_id  AS pic_relawan_id,
+                        pk.tanggal_mulai AS pic_tanggal_mulai
+                    FROM kader k
+                    JOIN opd o ON k.opd_id = o.opd_id
+                    LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status_keaktifan = 'Aktif'
+                    LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
+                    LEFT JOIN users u    ON r.user_id = u.user_id
+                    WHERE k.opd_id = $1
+                    ORDER BY k.kader_id, pk.tanggal_mulai DESC
+                ) subquery
+                ORDER BY created_at DESC;
             `;
             params = [opd_id];
         } else {
             query = `
-                SELECT
-                    k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
-                    k.status_keaktifan, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
-                    u.nama_lengkap AS pic_nama,
-                    u.nik          AS pic_nik,
-                    u.no_hp        AS pic_no_hp,
-                    pk.relawan_id  AS pic_relawan_id,
-                    pk.tanggal_mulai AS pic_tanggal_mulai
-                FROM kader k
-                JOIN opd o ON k.opd_id = o.opd_id
-                LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status_keaktifan = 'Aktif'
-                LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
-                LEFT JOIN users u    ON r.user_id = u.user_id
-                ORDER BY k.created_at DESC;
+                SELECT * FROM (
+                    SELECT DISTINCT ON (k.kader_id)
+                        k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
+                        k.status_keaktifan, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
+                        u.nama_lengkap AS pic_nama,
+                        u.nik          AS pic_nik,
+                        u.no_hp        AS pic_no_hp,
+                        pk.relawan_id  AS pic_relawan_id,
+                        pk.tanggal_mulai AS pic_tanggal_mulai
+                    FROM kader k
+                    JOIN opd o ON k.opd_id = o.opd_id
+                    LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status_keaktifan = 'Aktif'
+                    LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
+                    LEFT JOIN users u    ON r.user_id = u.user_id
+                    ORDER BY k.kader_id, pk.tanggal_mulai DESC
+                ) subquery
+                ORDER BY created_at DESC;
             `;
             params = [];
         }
@@ -630,24 +636,25 @@ export const getKaderByOpd = async (req: OpdAuthRequest, res: Response): Promise
         const opdId = req.opd_id;
 
         const result = await executeQueryWithContext(`
-            SELECT
-                k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
-                k.status_keaktifan, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
-                u.nama_lengkap AS pic_nama,
-                u.nik          AS pic_nik,
-                u.no_hp        AS pic_no_hp,
-                pk.relawan_id  AS pic_relawan_id,
-                pk.tanggal_mulai AS pic_tanggal_mulai,
-                COUNT(pr.relawan_id) AS jumlah_anggota
-            FROM kader k
-            JOIN opd o ON k.opd_id = o.opd_id
-            LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status_keaktifan = 'Aktif'
-            LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
-            LEFT JOIN users u    ON r.user_id = u.user_id
-            LEFT JOIN penugasan_relawan pr ON k.kader_id = pr.kader_id AND pr.status_keaktifan = 'Aktif'
-            WHERE k.opd_id = $1
-            GROUP BY k.kader_id, o.nama_opd, u.nama_lengkap, u.nik, u.no_hp, pk.relawan_id, pk.tanggal_mulai
-            ORDER BY k.nama_kader ASC
+            SELECT * FROM (
+                SELECT DISTINCT ON (k.kader_id)
+                    k.kader_id, k.kader_id AS id, k.nama_kader, k.nama_kader AS nama, k.deskripsi, k.opd_id,
+                    k.status_keaktifan, k.sk_id, k.created_at, k.updated_at, o.nama_opd,
+                    u.nama_lengkap AS pic_nama,
+                    u.nik          AS pic_nik,
+                    u.no_hp        AS pic_no_hp,
+                    pk.relawan_id  AS pic_relawan_id,
+                    pk.tanggal_mulai AS pic_tanggal_mulai,
+                    (SELECT COUNT(pr.relawan_id) FROM penugasan_relawan pr WHERE pr.kader_id = k.kader_id AND pr.status_keaktifan = 'Aktif') AS jumlah_anggota
+                FROM kader k
+                JOIN opd o ON k.opd_id = o.opd_id
+                LEFT JOIN pic_kader pk ON k.kader_id = pk.kader_id AND pk.status_keaktifan = 'Aktif'
+                LEFT JOIN relawan r  ON pk.relawan_id = r.relawan_id
+                LEFT JOIN users u    ON r.user_id = u.user_id
+                WHERE k.opd_id = $1
+                ORDER BY k.kader_id, pk.tanggal_mulai DESC
+            ) subquery
+            ORDER BY nama ASC;
         `, [opdId], req.user);
 
         res.status(200).json({ success: true, data: result.rows });

@@ -95,53 +95,74 @@ export const getOpdById = async (req: AuthRequest, res: Response): Promise<void>
  * Semua dalam 1 transaksi atomic.
  */
 export const createOpd = async (req: AuthRequest, res: Response): Promise<void> => {
-    const { nama_opd, alamat, kontak, nik_pic, nama_pic } = req.body;
-    // nama_pic = nama lengkap PIC (opsional, fallback ke nama_opd)
+    const { nama_opd, alamat, kontak, nik_pic, nama_pic, pic } = req.body;
+    const picName = nama_pic || pic;
 
-    if (!nama_opd) {
+    if (!nama_opd || !nama_opd.trim()) {
         res.status(400).json({ success: false, message: 'Field nama_opd wajib diisi' });
         return;
     }
-    if (nama_opd.length < 3) {
-        res.status(400).json({ success: false, message: 'Nama OPD minimal 3 karakter' });
+    const cleanNamaOpd = nama_opd.trim();
+    if (cleanNamaOpd.length < 3) {
+        res.status(400).json({ success: false, message: 'Nama OPD terlalu pendek, minimal harus 3 karakter (contoh: Bappeda, Dinkes, Disdik)' });
         return;
     }
-    if (nama_opd.length > 255) {
-        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh lebih dari 255 karakter' });
+    if (cleanNamaOpd.length > 100) {
+        res.status(400).json({ success: false, message: 'Nama OPD terlalu panjang, maksimal 100 karakter' });
         return;
     }
-    if (!/^[a-zA-Z\s]+$/.test(nama_opd)) {
-        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh mengandung angka atau karakter spesial' });
+    if (/\d/.test(cleanNamaOpd)) {
+        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh mengandung angka' });
         return;
     }
-    if (alamat) {
-        if (alamat.length < 5) {
-            res.status(400).json({ success: false, message: 'Alamat OPD minimal 5 karakter' });
+    if (/[^a-zA-Z\s]/.test(cleanNamaOpd)) {
+        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh mengandung karakter spesial (hanya huruf alfabet dan spasi yang diperbolehkan)' });
+        return;
+    }
+
+    let cleanAlamat = null;
+    if (alamat && alamat.trim()) {
+        cleanAlamat = alamat.trim();
+        if (cleanAlamat.length < 5) {
+            res.status(400).json({ success: false, message: 'Alamat OPD terlalu pendek, minimal harus 5 karakter' });
             return;
         }
-        if (/^\d+$/.test(alamat)) {
-            res.status(400).json({ success: false, message: 'Alamat OPD tidak boleh hanya berisi angka' });
+        if (cleanAlamat.length > 255) {
+            res.status(400).json({ success: false, message: 'Alamat OPD terlalu panjang, maksimal 255 karakter' });
             return;
         }
-        if (!/^[a-zA-Z0-9\s.,\-\/]+$/.test(alamat)) {
-            res.status(400).json({ success: false, message: 'Alamat OPD tidak boleh mengandung karakter spesial yang tidak valid' });
+        if (/^\d+$/.test(cleanAlamat)) {
+            res.status(400).json({ success: false, message: 'Alamat OPD tidak valid (tidak boleh hanya berupa deretan angka)' });
+            return;
+        }
+        if (/[^a-zA-Z0-9\s.,\-\/#]/.test(cleanAlamat)) {
+            res.status(400).json({ success: false, message: 'Alamat OPD mengandung karakter spesial yang tidak valid (hanya huruf, angka, spasi, serta tanda baca . , - / # yang diperbolehkan)' });
             return;
         }
     }
-    if (nama_pic) {
-        if (nama_pic.length < 3) {
-            res.status(400).json({ success: false, message: 'Nama PIC minimal 3 karakter' });
-            return;
-        }
-        if (nama_pic.length > 100) {
-            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh lebih dari 100 karakter' });
-            return;
-        }
-        if (!REGEX_PATTERNS.NAMA_RELAWAN.test(nama_pic)) {
-            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka atau karakter spesial selain tanda baca nama' });
-            return;
-        }
+
+    if (!picName || !picName.trim()) {
+        res.status(400).json({ success: false, message: 'Nama PIC wajib diisi' });
+        return;
     }
+    const cleanPicName = picName.trim();
+    if (cleanPicName.length < 3) {
+        res.status(400).json({ success: false, message: 'Nama PIC terlalu pendek, minimal harus 3 karakter' });
+        return;
+    }
+    if (cleanPicName.length > 100) {
+        res.status(400).json({ success: false, message: 'Nama PIC terlalu panjang, maksimal 100 karakter' });
+        return;
+    }
+    if (/\d/.test(cleanPicName)) {
+        res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka' });
+        return;
+    }
+    if (/[^a-zA-Z\s.,'\-]/.test(cleanPicName)) {
+        res.status(400).json({ success: false, message: 'Nama PIC mengandung karakter spesial yang tidak valid (hanya huruf, spasi, tanda titik, koma, petik tunggal, dan tanda hubung yang diperbolehkan)' });
+        return;
+    }
+
     if (kontak) {
         const cleanKontak = cleanPhoneNumber(kontak);
         if (REGEX_PATTERNS.HAS_LETTERS.test(cleanKontak)) {
@@ -176,14 +197,14 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
         const userRes = await executeQueryWithContext(
             `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
             VALUES ($1, $2, $3, $4, 'opd', true) RETURNING user_id`,
-            [nik_pic, nama_pic || nama_opd, kontak, hashedPassword], req.user
+            [nik_pic, cleanPicName, kontak ? cleanPhoneNumber(kontak) : null, hashedPassword], req.user
         );
         const userId = userRes.rows[0].user_id;
 
         // 2. Buat OPD 
         const opdRes = await executeQueryWithContext(
             `INSERT INTO opd (nama_opd, alamat) VALUES ($1, $2) RETURNING *;`,
-            [nama_opd, alamat || null], req.user
+            [cleanNamaOpd, cleanAlamat], req.user
         );
         const opdId = opdRes.rows[0].opd_id;
 
@@ -245,22 +266,73 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
                 errors.push('Satu baris dilewati: kolom namaOpd kosong');
                 continue;
             }
-            if (namaOpd.length > 255) {
-                errors.push(`"${namaOpd}": Nama OPD melebihi batas 255 karakter`);
+            if (namaOpd.length < 3) {
+                errors.push(`"${namaOpd}": Nama OPD terlalu pendek (min 3 karakter)`);
                 continue;
             }
-            if (!REGEX_PATTERNS.NAMA_OPD.test(namaOpd)) {
-                errors.push(`"${namaOpd}": Nama OPD tidak boleh mengandung angka atau karakter spesial`);
+            if (namaOpd.length > 100) {
+                errors.push(`"${namaOpd}": Nama OPD melebihi batas 100 karakter`);
                 continue;
             }
-            if (pic && !REGEX_PATTERNS.NAMA_RELAWAN.test(pic)) {
-                errors.push(`"${namaOpd}": Format Nama PIC "${pic}" tidak valid (hanya huruf dan tanda baca nama)`);
+            if (/\d/.test(namaOpd)) {
+                errors.push(`"${namaOpd}": Nama OPD tidak boleh mengandung angka`);
                 continue;
             }
+            if (/[^a-zA-Z\s]/.test(namaOpd)) {
+                errors.push(`"${namaOpd}": Nama OPD tidak boleh mengandung karakter spesial`);
+                continue;
+            }
+
+            let cleanAlamat = null;
+            if (alamat) {
+                cleanAlamat = alamat;
+                if (cleanAlamat.length < 5) {
+                    errors.push(`"${namaOpd}": Alamat OPD minimal 5 karakter`);
+                    continue;
+                }
+                if (cleanAlamat.length > 255) {
+                    errors.push(`"${namaOpd}": Alamat OPD melebihi batas 255 karakter`);
+                    continue;
+                }
+                if (/^\d+$/.test(cleanAlamat)) {
+                    errors.push(`"${namaOpd}": Alamat OPD tidak boleh hanya berupa angka`);
+                    continue;
+                }
+                if (/[^a-zA-Z0-9\s.,\-\/#]/.test(cleanAlamat)) {
+                    errors.push(`"${namaOpd}": Alamat OPD mengandung karakter spesial yang tidak valid`);
+                    continue;
+                }
+            }
+
+            if (!pic) {
+                errors.push(`"${namaOpd}": Nama PIC kosong`);
+                continue;
+            }
+            if (pic.length < 3) {
+                errors.push(`"${namaOpd}": Nama PIC terlalu pendek (min 3 karakter)`);
+                continue;
+            }
+            if (pic.length > 100) {
+                errors.push(`"${namaOpd}": Nama PIC melebihi batas 100 karakter`);
+                continue;
+            }
+            if (/\d/.test(pic)) {
+                errors.push(`"${namaOpd}": Nama PIC tidak boleh mengandung angka`);
+                continue;
+            }
+            if (/[^a-zA-Z\s.,'\-]/.test(pic)) {
+                errors.push(`"${namaOpd}": Nama PIC mengandung karakter spesial yang tidak valid`);
+                continue;
+            }
+
             if (kontak) {
                 const cleanKontak = cleanPhoneNumber(kontak);
+                if (REGEX_PATTERNS.HAS_LETTERS.test(cleanKontak)) {
+                    errors.push(`"${namaOpd}": Format kontak "${kontak}" tidak boleh mengandung huruf`);
+                    continue;
+                }
                 if (!REGEX_PATTERNS.NO_HP.test(cleanKontak)) {
-                    errors.push(`"${namaOpd}": Format kontak/No HP "${kontak}" tidak valid (harus 08... atau +628...)`);
+                    errors.push(`"${namaOpd}": Format kontak "${kontak}" tidak valid (harus 08... atau +628...)`);
                     continue;
                 }
             }
@@ -300,7 +372,7 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
                 const userRes = await client.query(
                     `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
                      VALUES ($1, $2, $3, $4, 'opd', true) RETURNING user_id`,
-                    [nikPic, pic || namaOpd, kontak, hashedPassword]
+                    [nikPic, pic, kontak ? cleanPhoneNumber(kontak) : null, hashedPassword]
                 );
                 const userId = userRes.rows[0].user_id;
 
@@ -308,7 +380,7 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
                 const opdRes = await client.query(
                     `INSERT INTO opd (nama_opd, alamat, status_keaktifan)
                      VALUES ($1, $2, true) RETURNING opd_id`,
-                    [namaOpd, alamat]
+                    [namaOpd, cleanAlamat]
                 );
                 const opdId = opdRes.rows[0].opd_id;
 
@@ -352,50 +424,171 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
  */
 export const updateOpd = async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { nama_opd, alamat } = req.body;
-    if (!nama_opd) {
+    const { nama_opd, alamat, kontak, nik_pic, nama_pic, pic } = req.body;
+    const picName = nama_pic || pic;
+
+    if (!nama_opd || !nama_opd.trim()) {
         res.status(400).json({ success: false, message: 'Field nama_opd wajib diisi' });
         return;
     }
-    if (nama_opd.length < 3) {
-        res.status(400).json({ success: false, message: 'Nama OPD minimal 3 karakter' });
+    const cleanNamaOpd = nama_opd.trim();
+    if (cleanNamaOpd.length < 3) {
+        res.status(400).json({ success: false, message: 'Nama OPD terlalu pendek, minimal harus 3 karakter (contoh: Bappeda, Dinkes, Disdik)' });
         return;
     }
-    if (nama_opd.length > 255) {
-        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh lebih dari 255 karakter' });
+    if (cleanNamaOpd.length > 100) {
+        res.status(400).json({ success: false, message: 'Nama OPD terlalu panjang, maksimal 100 karakter' });
         return;
     }
-    if (!/^[a-zA-Z\s]+$/.test(nama_opd)) {
-        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh mengandung angka atau karakter spesial' });
+    if (/\d/.test(cleanNamaOpd)) {
+        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh mengandung angka' });
         return;
     }
-    if (alamat) {
-        if (alamat.length < 5) {
-            res.status(400).json({ success: false, message: 'Alamat OPD minimal 5 karakter' });
+    if (/[^a-zA-Z\s]/.test(cleanNamaOpd)) {
+        res.status(400).json({ success: false, message: 'Nama OPD tidak boleh mengandung karakter spesial (hanya huruf alfabet dan spasi yang diperbolehkan)' });
+        return;
+    }
+
+    let cleanAlamat = null;
+    if (alamat && alamat.trim()) {
+        cleanAlamat = alamat.trim();
+        if (cleanAlamat.length < 5) {
+            res.status(400).json({ success: false, message: 'Alamat OPD terlalu pendek, minimal harus 5 karakter' });
             return;
         }
-        if (/^\d+$/.test(alamat)) {
-            res.status(400).json({ success: false, message: 'Alamat OPD tidak boleh hanya berisi angka' });
+        if (cleanAlamat.length > 255) {
+            res.status(400).json({ success: false, message: 'Alamat OPD terlalu panjang, maksimal 255 karakter' });
             return;
         }
-        if (!/^[a-zA-Z0-9\s.,\-\/]+$/.test(alamat)) {
-            res.status(400).json({ success: false, message: 'Alamat OPD tidak boleh mengandung karakter spesial yang tidak valid' });
+        if (/^\d+$/.test(cleanAlamat)) {
+            res.status(400).json({ success: false, message: 'Alamat OPD tidak valid (tidak boleh hanya berupa deretan angka)' });
+            return;
+        }
+        if (/[^a-zA-Z0-9\s.,\-\/#]/.test(cleanAlamat)) {
+            res.status(400).json({ success: false, message: 'Alamat OPD mengandung karakter spesial yang tidak valid (hanya huruf, angka, spasi, serta tanda baca . , - / # yang diperbolehkan)' });
             return;
         }
     }
+
+    let cleanPicName = null;
+    if (picName !== undefined) {
+        if (!picName || !picName.trim()) {
+            res.status(400).json({ success: false, message: 'Nama PIC wajib diisi' });
+            return;
+        }
+        cleanPicName = picName.trim();
+        if (cleanPicName.length < 3) {
+            res.status(400).json({ success: false, message: 'Nama PIC terlalu pendek, minimal harus 3 karakter' });
+            return;
+        }
+        if (cleanPicName.length > 100) {
+            res.status(400).json({ success: false, message: 'Nama PIC terlalu panjang, maksimal 100 karakter' });
+            return;
+        }
+        if (/\d/.test(cleanPicName)) {
+            res.status(400).json({ success: false, message: 'Nama PIC tidak boleh mengandung angka' });
+            return;
+        }
+        if (/[^a-zA-Z\s.,'\-]/.test(cleanPicName)) {
+            res.status(400).json({ success: false, message: 'Nama PIC mengandung karakter spesial yang tidak valid (hanya huruf, spasi, tanda titik, koma, petik tunggal, dan tanda hubung yang diperbolehkan)' });
+            return;
+        }
+    }
+
+    if (kontak) {
+        const cleanKontak = cleanPhoneNumber(kontak);
+        if (REGEX_PATTERNS.HAS_LETTERS.test(cleanKontak)) {
+            res.status(400).json({ success: false, message: 'Nomor kontak tidak boleh mengandung huruf' });
+            return;
+        }
+        if (!REGEX_PATTERNS.NO_HP.test(cleanKontak)) {
+            res.status(400).json({ success: false, message: 'Format nomor kontak tidak valid (harus diawali 08 atau +628, minimal 9-13 digit angka)' });
+            return;
+        }
+    }
+
+    if (nik_pic && !REGEX_PATTERNS.NIK.test(nik_pic)) {
+        res.status(400).json({ success: false, message: 'NIK PIC harus terdiri dari tepat 16 digit angka' });
+        return;
+    }
+
+    const client = await pool.connect();
     try {
-        const result = await executeQueryWithContext(
+        await client.query('BEGIN');
+        
+        // Set context
+        if (req.user && req.user.id) {
+            await client.query("SELECT set_config('app.current_user_id', $1, true);", [req.user.id.toString()]);
+            await client.query("SELECT set_config('app.current_user_role', $1, true);", [req.user.role]);
+        }
+
+        const result = await client.query(
             `UPDATE opd SET nama_opd = $1, alamat = $2, updated_at = CURRENT_TIMESTAMP WHERE opd_id = $3 RETURNING *;`,
-            [nama_opd, alamat || null, id], req.user
+            [cleanNamaOpd, cleanAlamat, id]
         );
         if (result.rows.length === 0) {
+            await client.query('ROLLBACK');
+            client.release();
             res.status(404).json({ success: false, message: 'Data OPD tidak ditemukan' });
             return;
         }
+
+        // Update user (PIC) if provided
+        if (cleanPicName || nik_pic || kontak) {
+            const pengelolaRes = await client.query(
+                `SELECT user_id FROM pengelola_opd WHERE opd_id = $1 AND status_keaktifan = 'Aktif' LIMIT 1`,
+                [id]
+            );
+            
+            if (pengelolaRes.rows.length > 0) {
+                const userId = pengelolaRes.rows[0].user_id;
+                
+                // If NIK is changed, ensure it's not used by someone else
+                if (nik_pic) {
+                    const checkNik = await client.query(`SELECT user_id FROM users WHERE nik = $1 AND user_id != $2`, [nik_pic, userId]);
+                    if (checkNik.rows.length > 0) {
+                        await client.query('ROLLBACK');
+                        client.release();
+                        res.status(400).json({ success: false, message: 'NIK PIC sudah terdaftar di sistem' });
+                        return;
+                    }
+                }
+
+                const updateFields = [];
+                const values = [];
+                let paramIndex = 1;
+
+                if (cleanPicName) {
+                    updateFields.push(`nama_lengkap = $${paramIndex++}`);
+                    values.push(cleanPicName);
+                }
+                if (nik_pic) {
+                    updateFields.push(`nik = $${paramIndex++}`);
+                    values.push(nik_pic);
+                }
+                if (kontak) {
+                    updateFields.push(`no_hp = $${paramIndex++}`);
+                    values.push(cleanPhoneNumber(kontak));
+                }
+
+                if (updateFields.length > 0) {
+                    values.push(userId);
+                    await client.query(
+                        `UPDATE users SET ${updateFields.join(', ')} WHERE user_id = $${paramIndex}`,
+                        values
+                    );
+                }
+            }
+        }
+
+        await client.query('COMMIT');
         res.status(200).json({ success: true, message: 'Berhasil memperbarui data OPD', data: result.rows[0] });
     } catch (error: any) {
+        await client.query('ROLLBACK');
         console.error('Error in updateOpd:', error.message);
         res.status(500).json({ success: false, message: 'Terjadi kesalahan pada server' });
+    } finally {
+        client.release();
     }
 };
 
