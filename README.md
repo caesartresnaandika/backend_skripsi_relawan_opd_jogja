@@ -4,7 +4,7 @@ Repositori ini berisi source code backend untuk aplikasi **Manajemen Relawan Bap
 
 ## 🚀 Persiapan Awal (Instalasi)
 
-Bagi rekan pengembang (khususnya Frontend Developer) yang baru melakukan `git clone` atau ingin menjalankan server API ini di lokal, ikuti langkah berikut:
+Bagi rekan pengembang yang baru melakukan `git clone` atau ingin menjalankan server API ini di lokal, ikuti langkah berikut:
 
 ### 1. Instalasi Dependencies
 Buka terminal di folder project dan jalankan perintah:
@@ -42,7 +42,7 @@ Server akan berjalan di `http://localhost:3000`.
 
 ---
 
-## 🌍 Panduan Deployment di Server Mitra (Self-Hosted)
+## 🌍 Panduan Singkat Deployment 
 
 Bagi instansi atau Developer Mitra yang ingin melakukan *deployment* (hosting mandiri) aplikasi backend ini di server (seperti VPS) milik instansi masing-masing, berikut adalah panduan konfigurasinya:
 
