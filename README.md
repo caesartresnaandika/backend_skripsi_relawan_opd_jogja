@@ -158,5 +158,3 @@ Terdapat beberapa routing lain yang didaftarkan untuk kebutuhan sistem lintas-ro
 - **Debug Database** (`/api/debug`): Endpoint khusus development untuk memverifikasi koneksi aplikasi ke PostgreSQL.
 
 ---
-2. **Penanganan Error:** Jika menjumpai pesan Error 500 saat Testing di Postman/Browser, kemungkinan besar terkait format struktur JSON yang dikirim di *Body*. Hubungi Backend jika bingung.
-3. **Konsep Token:** Jangan pernah melewatkan penyematan *Authorization Bearer Token* kecuali pada endpoint Login & Register.
