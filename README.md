@@ -82,8 +82,7 @@ Bagi instansi atau Developer Mitra yang ingin melakukan *deployment* (hosting ma
 
 1. **Serverless Deployment (Vercel):** Aplikasi backend ini dikonfigurasi untuk berjalan sebagai *Serverless Function* saat dideploy ke Vercel. Pada `index.ts`, aplikasi menggunakan `export default app` dan siap disajikan via eksekusi `vercel.json`.
 2. **Middleware Prefix Auto-Correction:** Terdapat middleware global di `index.ts` yang cerdas. Jika Frontend mengirim request tanpa prefix `/api` (misal: `/auth/login`), middleware ini akan secara otomatis menambahkan `/api` di depannya.
-3. **Database Security (RLS):** Secara default, aplikasi menghindari penggunaan role superuser (seperti `postgres`), melainkan `app_user` untuk mengaktifkan aturan *Row-Level Security* di tingkat database.
-4. **File Handling:** Aplikasi sudah mendukung penanganan file upload menggunakan library `multer` untuk memproses *multipart/form-data* (misalnya upload file dokumen/SK).
+3. **File Handling:** Aplikasi sudah mendukung penanganan file upload menggunakan library `multer` untuk memproses *multipart/form-data* (misalnya upload file dokumen/SK).
 
 ---
 
