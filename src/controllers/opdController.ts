@@ -184,22 +184,29 @@ export const createOpd = async (req: AuthRequest, res: Response): Promise<void> 
     }
 
     try {
-        const checkNik = await executeQueryWithContext(`SELECT user_id FROM users WHERE nik = $1`, [nik_pic], req.user);
-        if (checkNik.rows.length > 0) {
-            res.status(400).json({ success: false, message: 'NIK PIC sudah terdaftar di sistem' });
+        const checkOpd = await executeQueryWithContext(`SELECT opd_id FROM opd WHERE nama_opd ILIKE $1`, [cleanNamaOpd], req.user);
+        if (checkOpd.rows.length > 0) {
+            res.status(400).json({ success: false, message: 'Nama OPD sudah terdaftar di sistem' });
             return;
         }
 
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(nik_pic + (process.env.PASSWORD_PEPPER || ''), salt);
+        const checkNik = await executeQueryWithContext(`SELECT user_id FROM users WHERE nik = $1`, [nik_pic], req.user);
+        let userId;
 
-        // 1. Buat akun user
-        const userRes = await executeQueryWithContext(
-            `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
-            VALUES ($1, $2, $3, $4, 'opd', true) RETURNING user_id`,
-            [nik_pic, cleanPicName, kontak ? cleanPhoneNumber(kontak) : null, hashedPassword], req.user
-        );
-        const userId = userRes.rows[0].user_id;
+        if (checkNik.rows.length > 0) {
+            userId = checkNik.rows[0].user_id;
+        } else {
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(nik_pic + (process.env.PASSWORD_PEPPER || ''), salt);
+
+            // 1. Buat akun user
+            const userRes = await executeQueryWithContext(
+                `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
+                VALUES ($1, $2, $3, $4, 'opd', true) RETURNING user_id`,
+                [nik_pic, cleanPicName, kontak ? cleanPhoneNumber(kontak) : null, hashedPassword], req.user
+            );
+            userId = userRes.rows[0].user_id;
+        }
 
         // 2. Buat OPD 
         const opdRes = await executeQueryWithContext(
@@ -356,25 +363,31 @@ export const createBulkOpd = async (req: AuthRequest, res: Response): Promise<vo
                     }
                 }
 
-                const checkNik = await client.query(
-                    `SELECT user_id FROM users WHERE nik = $1`, [nikPic]
-                );
-                if (checkNik.rows.length > 0) {
-                    skipped.push(`"${namaOpd}" (NIK ${nikPic} sudah terdaftar)`);
+                const checkOpd = await client.query(`SELECT opd_id FROM opd WHERE nama_opd ILIKE $1`, [namaOpd]);
+                if (checkOpd.rows.length > 0) {
+                    skipped.push(`"${namaOpd}" (Nama OPD sudah terdaftar)`);
                     await client.query('ROLLBACK');
                     client.release();
                     continue;
                 }
 
-                // Buat akun user
-                const salt = await bcrypt.genSalt(10);
-                const hashedPassword = await bcrypt.hash(nikPic + (process.env.PASSWORD_PEPPER || ''), salt);
-                const userRes = await client.query(
-                    `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
-                     VALUES ($1, $2, $3, $4, 'opd', true) RETURNING user_id`,
-                    [nikPic, pic, kontak ? cleanPhoneNumber(kontak) : null, hashedPassword]
+                const checkNik = await client.query(
+                    `SELECT user_id FROM users WHERE nik = $1`, [nikPic]
                 );
-                const userId = userRes.rows[0].user_id;
+                let userId;
+                if (checkNik.rows.length > 0) {
+                    userId = checkNik.rows[0].user_id;
+                } else {
+                    // Buat akun user
+                    const salt = await bcrypt.genSalt(10);
+                    const hashedPassword = await bcrypt.hash(nikPic + (process.env.PASSWORD_PEPPER || ''), salt);
+                    const userRes = await client.query(
+                        `INSERT INTO users (nik, nama_lengkap, no_hp, password, role, status_keaktifan)
+                         VALUES ($1, $2, $3, $4, 'opd', true) RETURNING user_id`,
+                        [nikPic, pic, kontak ? cleanPhoneNumber(kontak) : null, hashedPassword]
+                    );
+                    userId = userRes.rows[0].user_id;
+                }
 
                 // Insert OPD (tanpa pic/nik_pic/kontak)
                 const opdRes = await client.query(
@@ -522,6 +535,14 @@ export const updateOpd = async (req: AuthRequest, res: Response): Promise<void> 
             await client.query("SELECT set_config('app.current_user_role', $1, true);", [req.user.role]);
         }
 
+        const checkOpd = await client.query(`SELECT opd_id FROM opd WHERE nama_opd ILIKE $1 AND opd_id != $2`, [cleanNamaOpd, id]);
+        if (checkOpd.rows.length > 0) {
+            await client.query('ROLLBACK');
+            client.release();
+            res.status(400).json({ success: false, message: 'Nama OPD sudah terdaftar di sistem' });
+            return;
+        }
+
         const result = await client.query(
             `UPDATE opd SET nama_opd = $1, alamat = $2, updated_at = CURRENT_TIMESTAMP WHERE opd_id = $3 RETURNING *;`,
             [cleanNamaOpd, cleanAlamat, id]
@@ -542,15 +563,18 @@ export const updateOpd = async (req: AuthRequest, res: Response): Promise<void> 
             
             if (pengelolaRes.rows.length > 0) {
                 const userId = pengelolaRes.rows[0].user_id;
+                let targetUserId = userId;
                 
-                // If NIK is changed, ensure it's not used by someone else
+                // If NIK is changed, check if it's already used by someone else
                 if (nik_pic) {
                     const checkNik = await client.query(`SELECT user_id FROM users WHERE nik = $1 AND user_id != $2`, [nik_pic, userId]);
                     if (checkNik.rows.length > 0) {
-                        await client.query('ROLLBACK');
-                        client.release();
-                        res.status(400).json({ success: false, message: 'NIK PIC sudah terdaftar di sistem' });
-                        return;
+                        targetUserId = checkNik.rows[0].user_id;
+                        // Change the PIC in pengelola_opd to this existing user
+                        await client.query(
+                            `UPDATE pengelola_opd SET user_id = $1 WHERE opd_id = $2 AND status_keaktifan = 'Aktif'`,
+                            [targetUserId, id]
+                        );
                     }
                 }
 
@@ -562,7 +586,7 @@ export const updateOpd = async (req: AuthRequest, res: Response): Promise<void> 
                     updateFields.push(`nama_lengkap = $${paramIndex++}`);
                     values.push(cleanPicName);
                 }
-                if (nik_pic) {
+                if (nik_pic && targetUserId === userId) {
                     updateFields.push(`nik = $${paramIndex++}`);
                     values.push(nik_pic);
                 }
@@ -572,7 +596,7 @@ export const updateOpd = async (req: AuthRequest, res: Response): Promise<void> 
                 }
 
                 if (updateFields.length > 0) {
-                    values.push(userId);
+                    values.push(targetUserId);
                     await client.query(
                         `UPDATE users SET ${updateFields.join(', ')} WHERE user_id = $${paramIndex}`,
                         values
