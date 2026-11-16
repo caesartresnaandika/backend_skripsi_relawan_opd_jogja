@@ -849,14 +849,14 @@ export const updateRelawan = async (req: AuthRequest, res: Response): Promise<vo
                 if (assign.penugasan_id) {
                     await client.query(`
                         UPDATE penugasan_relawan
-                        SET opd_id = $1, kader_id = $2, jabatan = $3, detail_jabatan = $4, status_keaktifan = $5, updated_at = CURRENT_TIMESTAMP
-                        WHERE penugasan_id = $6
-                    `, [opdId, assign.kader_id || null, assign.peran || null, assign.detail || null, statusKeaktifan, assign.penugasan_id]);
+                        SET opd_id = $1, kader_id = $2, jabatan = $3, detail_jabatan = $4, penugasan = $5, status_keaktifan = $6, updated_at = CURRENT_TIMESTAMP
+                        WHERE penugasan_id = $7
+                    `, [opdId, assign.kader_id || null, assign.peran || null, assign.detail || null, assign.penugasan || null, statusKeaktifan, assign.penugasan_id]);
                 } else {
                     await client.query(`
-                        INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, status_keaktifan)
-                        VALUES ($1,$2,$3,$4,$5,$6)
-                    `, [relawanId, opdId, assign.kader_id || null, assign.peran || null, assign.detail || null, statusKeaktifan]);
+                        INSERT INTO penugasan_relawan (relawan_id, opd_id, kader_id, jabatan, detail_jabatan, penugasan, status_keaktifan)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7)
+                    `, [relawanId, opdId, assign.kader_id || null, assign.peran || null, assign.detail || null, assign.penugasan || null, statusKeaktifan]);
                 }
             }
         }
